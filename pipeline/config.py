@@ -36,6 +36,13 @@ FAMILIES = {
     'white':  dict(v_min=165, s_max=95),
     'purple': dict(h=(125, 168), s_min=60),
     'pink':   dict(v_min=150, h_wrap=(168, 12), s=(40, 170)),
+    # Deep maroon petals -- crocus outers, iris falls. These are dark
+    # enough to fall in 'dark', which is meant for the brown-black
+    # foliage, and losing them cut every crocus into loose petals. The two
+    # populations separate cleanly by hue: foliage is H 0-30 at V 19-31,
+    # maroon petals are H 125-180 at V 54-75, both heavily saturated.
+    # 'maroon' is subtracted from 'dark', so these count as bloom.
+    'maroon': dict(h=(125, 180), s_min=150, v=(38, 95)),
 }
 
 # --- blooms ----------------------------------------------------------------
@@ -47,6 +54,19 @@ FAMILIES = {
 FLOWER_CLOSE = 61
 BLOOM_MIN_AREA = 15000
 
+# Two flower heads that touch come out as one asset. They are separated by
+# watershed on the distance transform, sweeping the threshold rather than
+# fixing it -- no single value fits both a pair of fat daffodil heads and a
+# slim iris.
+#
+# The accept rule is a share, not a pixel count, which is what makes it
+# work across both: a split counts only if the smallest part is at least
+# SPLIT_MIN_PART of the whole. Two flowers divide roughly in half and pass;
+# a flower shedding a single petal does not.
+SPLIT_MIN_AREA = 14000
+SPLIT_MIN_PART = 0.18
+SPLIT_MAX_PARTS = 3
+
 # --- grass -----------------------------------------------------------------
 # Green stems and leaves are ALSO emitted on their own, so the page can
 # scatter grass and flowers at independent densities. They remain part of
@@ -54,6 +74,10 @@ BLOOM_MIN_AREA = 15000
 GRASS_MIN_AREA = 9000
 GRASS_MIN_HEIGHT = 200
 GRASS_PER_PANEL = 12
+# Stems rising from a common root split like touching blooms do. Stems are
+# long and thin, so their distance transform peaks are shallow -- this
+# wants a lower fraction than the blooms.
+GRASS_SPLIT_MIN_PART = 0.22   # stems divide less evenly than blooms
 
 # --- curation --------------------------------------------------------------
 # Filled in from work/contact_sheet.png after a run. name -> (role, max, stem)
@@ -61,44 +85,46 @@ GRASS_PER_PANEL = 12
 #   max  -> longest side in px in the web payload
 #   stem -> virtual stem length below the sprite; the plant pivots there
 # Rejected, and why:
-#   daffodil-g   -- fragment, just the brown trumpet of a flower cut off-panel
-#   iris-pink-b  -- a single clean petal, but it doesn't read as a flower
-#   iris-pink-c  -- ditto, plus linen fringe along the top edge
-#   narcissus-d  -- one petal and a bud; too ambiguous at draw size
+#   iris-pink-a          -- top half of a bloom, cut flat across the bottom
+#   iris-pink-c/d        -- single petals; don't read as flowers
+#   iris-purple-b        -- a purple iris with someone else's petal attached
+#   iris-purple-c/d/e    -- single petals
+#   narcissus-d/e/f      -- incomplete; a petal and a bud
+#   blade-h/k/l/m/n/o/p  -- sparse fragments, nothing to draw
 KEEP = [
-    # daffodils
-    ('daffodil-b',    'flower', 168, 26),
-    ('daffodil-c',    'flower', 162, 26),
+    # --- daffodils
+    ('daffodil-a',    'flower', 160, 26),
+    ('daffodil-b',    'flower', 170, 26),
+    ('daffodil-c',    'flower', 164, 26),
     ('daffodil-d',    'flower', 158, 26),
-    ('daffodil-e',    'flower', 138, 24),
-    ('daffodil-a',    'clump',  180,  0),   # daffodil + narcissus together
-    ('daffodil-f',    'clump',  172,  0),   # daffodil pair
-    # narcissus
-    ('narcissus-a',   'flower', 134, 22),
-    ('narcissus-b',   'flower', 130, 22),
-    ('narcissus-c',   'flower', 120, 20),
-    # irises
-    ('iris-white-a',  'clump',  185,  0),   # white pair, purple-outlined
-    ('iris-white-b',  'clump',  178,  0),   # purple over pink
-    ('iris-pink-a',   'flower', 165, 26),
-    ('iris-purple-a', 'flower', 150, 26),
-    ('iris-purple-b', 'flower', 145, 24),
-    # crocus
+    ('daffodil-e',    'flower', 134, 24),   # profile view
+    ('daffodil-f',    'flower', 150, 24),   # was one asset with -g
+    ('daffodil-g',    'flower', 148, 24),
+    # --- narcissus
+    ('narcissus-a',   'flower', 134, 22),   # was one asset with daffodil-a
+    ('narcissus-b',   'flower', 132, 22),
+    ('narcissus-c',   'flower', 128, 22),
+    # --- irises
+    ('iris-white-a',  'flower', 162, 26),   # was one asset, split in two
+    ('iris-white-b',  'flower', 160, 26),
+    ('iris-pink-b',   'flower', 165, 26),
+    ('iris-purple-a', 'flower', 158, 26),
+    # --- crocus
     ('crocus-a',      'small',  118,  0),
-    ('crocus-b',      'small',  112,  0),
-    ('crocus-c',      'small',  116,  0),
-    # grass -- also emitted on their own so the page can scatter them
-    # at a density independent of the flowers (see WEIGHT in index.html)
-    ('blade-a',       'grass',  190,  0),
-    ('blade-b',       'grass',  178,  0),
-    ('blade-c',       'grass',  150,  0),
-    ('blade-d',       'grass',  188,  0),
-    ('blade-e',       'grass',  172,  0),
-    ('blade-f',       'grass',  165,  0),
-    ('blade-g',       'grass',  158,  0),
-    ('blade-h',       'grass',  152,  0),
-    ('blade-i',       'grass',  148,  0),
-    ('blade-j',       'grass',  144,  0),
+    ('crocus-b',      'small',  116,  0),
+    ('crocus-c',      'small',  112,  0),
+    # --- stems: structural, several blades rising from one root
+    ('blade-a',       'stem',   195,  0),
+    ('blade-b',       'stem',   180,  0),
+    ('blade-c',       'stem',   175,  0),
+    ('blade-d',       'stem',   168,  0),
+    ('blade-f',       'stem',   190,  0),
+    # --- single blades, for tufts. Scattered at a density independent of
+    # both the stems and the flowers -- see WEIGHT in src/index.html.
+    ('blade-e',       'grass',  150,  0),
+    ('blade-g',       'grass',  165,  0),
+    ('blade-i',       'grass',  158,  0),
+    ('blade-j',       'grass',  148,  0),
 ]
 
 # Colour grade, baked into the assets so the browser does no per-frame work.

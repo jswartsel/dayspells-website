@@ -37,6 +37,21 @@ first for what the project is and how to run it.
 - **Colour families are HSV gates** in `config.FAMILIES`. The green gate
   is what makes grass separable; a white-balance shift will slide greens
   out of it and grass extraction will quietly return nothing.
+- **`maroon` is subtracted from `dark`.** Crocus outers and iris falls are
+  deep maroon, dark enough to land in the `V < 95` gate meant for the
+  brown-black foliage. While they did, every crocus came out as loose
+  petals and the purple irises were missing their falls. The populations
+  separate by hue: foliage H 0–30 at V 19–31, maroon petals H 125–180 at
+  V 54–75. Don't merge them back.
+- **Splits are accepted on a share, not a pixel count.** No fixed
+  distance-transform threshold fits both a pair of fat daffodil heads and
+  a slim iris — the value that separated the irises shattered them into
+  single petals. So the threshold is swept and a split counts only if the
+  smallest part is ≥ `SPLIT_MIN_PART` of the whole.
+- **Blooms recurse, grass doesn't.** Three fused flowers split two ways
+  first, leaving one half still merged, so blooms split at `depth=2`.
+  Stems have no second waist to find and recursion just chops them into
+  segments, so grass runs one round.
 - **Colour grade is baked into the assets** (`config.GRADE`), not applied
   as a CSS `filter` on the canvas. A compositor filter over a full-screen
   canvas costs on every frame; this costs nothing.
@@ -54,13 +69,10 @@ first for what the project is and how to run it.
    `#fbdd7e`, a much brighter, more clipped yellow. The old panels' linen
    was olive `#8c762d`, so the page's whole mood has shifted paler. This
    is a look decision, not a bug — flagged with the user, not yet settled.
-2. **Some blooms merge.** `daffodil-a` is a daffodil and a narcissus
-   together; `iris-white-b` is a purple iris over a pink one. They're
-   curated as `clump`, which is fine, but a watershed split on the
-   distance transform would separate them if wanted.
-3. **Faint linen fringe** survives on a few petal tips (the crocuses, and
-   `iris-pink-c` which was rejected for it). Raising `FG_THRESHOLD` trades
-   it against eating thin stems.
+2. **Faint linen fringe** survives on a few petal tips. Raising
+   `FG_THRESHOLD` trades it against eating thin stems.
+3. **`daffodil-a` carries a small white scrap** at its base, left behind
+   when the narcissus it was fused to was split off.
 4. **The clearing behind the wordmark can read as a bald patch** on some
    seeds. It's density thinning (an ellipse in `seed()`), not a wash.
 5. **Faint vertical slub in the ground tile** repeats at 512px. It's real

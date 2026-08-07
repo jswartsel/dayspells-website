@@ -185,7 +185,11 @@ async function boot(){
 /* ---------- field ----------------------------------------------- */
 let W=0, H=0, DPR=1, plants=[], vig=null;
 
-const WEIGHT = {grass:6.2, small:2.0, clump:1.0, flower:2.3};
+/* Relative density per role, normalised by how many assets that role has,
+   so adding assets to a role makes it more varied rather than denser.
+   'stem' is several blades from one root; 'grass' is a single blade, for
+   tufts. They are separate roles so the two can be dialled independently. */
+const WEIGHT = {grass:5.0, stem:3.2, small:2.0, clump:1.0, flower:2.3};
 
 /* Uniform random scatter reads as wallpaper. A meadow grows in
    colonies, so each asset picks a few patches it prefers, and a

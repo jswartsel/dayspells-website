@@ -46,8 +46,10 @@ for d in ('flowers', 'grass', 'ground'):
 SPECIES = {
     ('daf', 'yellow'): 'daffodil',   ('daf', 'white'):  'narcissus',
     ('daf', 'purple'): 'crocus',     ('daf', 'pink'):   'crocus',
+    ('daf', 'maroon'): 'crocus',
     ('iri', 'yellow'): 'daffodil',   ('iri', 'white'):  'iris-white',
     ('iri', 'purple'): 'iris-purple',('iri', 'pink'):   'iris-pink',
+    ('iri', 'maroon'): 'iris-purple',
 }
 
 
@@ -107,12 +109,76 @@ def families(im, fg):
         if 's_min' in r: m &= S >  r['s_min']
         if 's_max' in r: m &= S <= r['s_max']
         if 's'     in r: m &= (S > r['s'][0]) & (S <= r['s'][1])
+        if 'v'     in r: m &= (V >= r['v'][0]) & (V < r['v'][1])
         if 'h'     in r: m &= (H >= r['h'][0]) & (H <= r['h'][1])
         if 'h_wrap' in r:
             lo, hi = r['h_wrap']
             m &= (H > lo) | (H < hi)
         out[name] = m
+    # Deep maroon petals are dark enough to land in 'dark', which exists
+    # for the brown-black foliage. Leaving them there cost every crocus
+    # half its petals.
+    if 'maroon' in out:
+        out['dark'] = out['dark'] & ~out['maroon']
     return out
+
+
+def _watershed(m, frac, min_area):
+    dt = cv2.distanceTransform((m > 0).astype(np.uint8), cv2.DIST_L2, 5)
+    sure = ((dt > frac * dt.max()) * 255).astype(np.uint8)
+    n, mk = cv2.connectedComponents(sure)
+    if n <= 2:
+        return []
+    ws = cv2.watershed(cv2.cvtColor(m, cv2.COLOR_GRAY2BGR), mk.copy())
+    parts = []
+    for i in range(1, n):
+        p = (((ws == i) & (m > 0)) * 255).astype(np.uint8)
+        if (p > 0).sum() >= min_area:
+            parts.append(small_holes(largest(p)))
+    return parts
+
+
+def split_parts(m, min_area=None, min_part=None, max_parts=None, depth=2):
+    """Split a mask where two heads touch, and only there.
+
+    Two blooms that meet join at a narrow waist, so thresholding the
+    distance transform leaves one marker per head; watershed then assigns
+    every pixel. The threshold is swept rather than fixed, because a fixed
+    one cannot fit both a pair of fat daffodil heads and a slim iris: the
+    value that separated the irises shattered them into single petals,
+    and the value that held the irises together left the daffodils merged.
+
+    The accept rule is scale-free instead. A split only counts if every
+    part is a substantial share of the parent -- two flowers split
+    roughly in half, whereas a flower shedding one petal does not. Of the
+    splits that qualify, take the most balanced.
+    """
+    min_area  = C.SPLIT_MIN_AREA if min_area  is None else min_area
+    min_part  = C.SPLIT_MIN_PART if min_part  is None else min_part
+    max_parts = C.SPLIT_MAX_PARTS if max_parts is None else max_parts
+    total = (m > 0).sum()
+    best, best_score = None, 0.0
+    for frac in np.arange(0.26, 0.72, 0.04):
+        parts = _watershed(m, float(frac), min_area)
+        if not (2 <= len(parts) <= max_parts):
+            continue
+        areas = [(p > 0).sum() for p in parts]
+        if sum(areas) < 0.72 * total:      # watershed lost too much
+            continue
+        share = min(areas) / total
+        if share >= min_part and share > best_score:
+            best, best_score = parts, share
+    if best is None:
+        return [m]
+    # Recurse. Three flowers in a mass split two ways first, leaving one
+    # half still merged; splitting again separates it without having to
+    # loosen the share rule, which would start shedding single petals.
+    if depth > 0:
+        out = []
+        for p in best:
+            out.extend(split_parts(p, min_area, min_part, max_parts, depth - 1))
+        return out
+    return best
 
 
 def stage_mask():
@@ -209,14 +275,22 @@ def stage_blooms():
                                       cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k)))
             # crossing wool is kept, crossing linen is not
             sil = largest(small_holes(closed & fgm))
-            dom = max(('yellow', 'white', 'purple', 'pink'),
-                      key=lambda f: (fam[f] & (petals > 0)).sum())
-            sp = SPECIES[(tag, dom)]
-            counts[sp] = counts.get(sp, 0) + 1
-            tagname = f'{sp}-{chr(96 + counts[sp])}'
-            w, h = write_asset(os.path.join(out, f'{tagname}.png'), im, sil)
-            gained = (sil > 0).sum() / max((petals > 0).sum(), 1) - 1
-            print(f'  {tagname:16s} {w:4d}x{h:4d}  +{gained*100:4.0f}% bridged')
+            parts = split_parts(sil)
+            for part in parts:
+                share = {f: (fam[f] & (part > 0)).sum()
+                         for f in ('yellow', 'white', 'purple', 'pink', 'maroon')}
+                dom = max(share, key=share.get)
+                # Pale salmon irises read as 'white' on saturation alone,
+                # which named a plainly pink flower iris-white. Pink wins
+                # the tie when there is a real amount of it.
+                if dom == 'white' and share['pink'] >= 0.4 * share['white']:
+                    dom = 'pink'
+                sp = SPECIES[(tag, dom)]
+                counts[sp] = counts.get(sp, 0) + 1
+                tagname = f'{sp}-{chr(96 + counts[sp])}'
+                w, h = write_asset(os.path.join(out, f'{tagname}.png'), im, part)
+                note = f'  (1 of {len(parts)})' if len(parts) > 1 else ''
+                print(f'  {tagname:16s} {w:4d}x{h:4d}{note}')
 
 
 # --------------------------------------------------------------- 3. grass ---
@@ -238,9 +312,16 @@ def stage_grass():
                 and st[i, cv2.CC_STAT_HEIGHT] >= C.GRASS_MIN_HEIGHT]
         for a, i in sorted(cand, reverse=True)[:C.GRASS_PER_PANEL]:
             m = small_holes(((lab == i) * 255).astype(np.uint8))
-            tagname = f'blade-{chr(97 + k)}'; k += 1
-            w, h = write_asset(os.path.join(out, f'{tagname}.png'), im, m)
-            print(f'  {tagname:16s} {w:4d}x{h:4d}  aspect={h/max(w,1):.1f}')
+            # a clump of stems rising from one root splits the same way
+            # two touching blooms do
+            # One round only. Stems have no second waist to find, so
+            # recursing just shatters them into segments.
+            for part in split_parts(m, min_area=C.GRASS_MIN_AREA,
+                                    min_part=C.GRASS_SPLIT_MIN_PART,
+                                    max_parts=3, depth=0):
+                tagname = f'blade-{chr(97 + k)}'; k += 1
+                w, h = write_asset(os.path.join(out, f'{tagname}.png'), im, part)
+                print(f'  {tagname:16s} {w:4d}x{h:4d}  aspect={h/max(w,1):.1f}')
 
 
 # --------------------------------------------------------------- 4. linen ---
