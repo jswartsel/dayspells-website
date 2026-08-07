@@ -8,19 +8,14 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
-  /* Palette measured off the rectified, relit panels. */
+  /* Palette measured off the panels. */
   :root{
-    --linen:      #8c762d;
+    --linen:      #d8c98a;
     --iris:       #3f1b32;
     --iris-deep:  #2e0921;
     --flare:      #f4451f;   /* wordmark */
-    --lilac:      #8a6f83;
-    --gold:       #d8a32b;
-    --ember:      #8b5708;
-    --blush:      #c9a388;
-    --cream:      #f3dfb9;
-    --frond:      #322a1e;
     --frond-dark: #1a130b;
+    --cream:      #f3dfb9;
   }
   *{box-sizing:border-box}
   html,body{height:100%}
@@ -67,6 +62,39 @@
   }
   .loading[data-done="true"]{opacity:0; pointer-events:none}
 
+  /* ---------- tuning panel -------------------------------------- */
+  /* Not part of the site. Open with the corner dot, the `c` key, or
+     #tune in the URL; it shows itself on localhost. */
+  .tune-open{
+    position:fixed; top:10px; right:10px; z-index:7; width:18px; height:18px;
+    border:0; border-radius:50%; cursor:pointer; padding:0;
+    background:rgba(26,19,11,.28); opacity:.35; transition:opacity .2s;
+  }
+  .tune-open:hover{opacity:.9}
+  .tune{
+    position:fixed; top:0; right:0; z-index:8; width:272px;
+    max-height:100vh; overflow-y:auto; padding:12px 14px 16px;
+    background:rgba(20,15,9,.9); color:var(--cream);
+    font-size:10px; letter-spacing:.06em; line-height:1.5;
+    backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+  }
+  .tune[hidden]{display:none}
+  .tune h2{margin:0 0 10px; font-size:10px; letter-spacing:.24em; text-transform:uppercase; opacity:.7}
+  .tune .grp{margin:0 0 10px; padding-top:8px; border-top:1px solid rgba(243,223,185,.14)}
+  .tune .grp:first-of-type{border-top:0; padding-top:0}
+  .tune label{display:block; margin:0 0 7px}
+  .tune .lab{display:flex; justify-content:space-between; opacity:.78}
+  .tune .lab b{font-weight:400; opacity:.95; font-variant-numeric:tabular-nums}
+  .tune input[type=range]{width:100%; margin:2px 0 0; accent-color:var(--flare); height:14px}
+  .tune .row{display:flex; gap:6px; margin-top:12px; flex-wrap:wrap}
+  .tune button{
+    flex:1 1 auto; padding:6px 8px; cursor:pointer;
+    font:inherit; letter-spacing:.1em; color:var(--cream);
+    background:rgba(243,223,185,.1); border:1px solid rgba(243,223,185,.22);
+  }
+  .tune button:hover{background:rgba(243,223,185,.2)}
+  .tune .note{margin:9px 0 0; opacity:.45; line-height:1.45}
+
   @media (prefers-reduced-motion: reduce){ .mark .caret{animation:none} }
 </style>
 </head>
@@ -76,6 +104,18 @@
 <p class="hint" id="hint">move through the field</p>
 <div class="loading" id="loading">threading</div>
 
+<button class="tune-open" id="tuneOpen" title="tuning (c)" aria-label="tuning"></button>
+<div class="tune" id="tune" hidden>
+  <h2>tuning</h2>
+  <div id="tuneBody"></div>
+  <div class="row">
+    <button id="tRegrow">regrow</button>
+    <button id="tCopy">copy json</button>
+    <button id="tReset">reset</button>
+  </div>
+  <p class="note" id="tuneNote">density and size need a regrow. everything else is live.</p>
+</div>
+
 <script id="payload" type="application/json"></script>
 <script>
 /* ==================================================================
@@ -83,17 +123,17 @@
 
    The meadow is built from photographs of two crewelwork panels.
    How the assets were made:
-     1. EXIF-corrected, then perspective-warped off the frame corners
-        so each panel is a flat 1300x3050 rectangle.
-     2. Luminance flattened against a heavy blur of itself: kills the
-        lighting falloff, keeps the wool colour.
-     3. Linen reference sampled from the panel margins; foreground =
-        normalised Lab distance from it, measured on a bilateral-
-        filtered copy so the weave doesn't register as signal.
-     4. Per flower: erode hard enough to sever the stems, keep the
-        blob nearest the seed point, reconstruct it back under the
-        mask. Cut depth swept 15-103px, scored on how much of the
-        silhouette touched the crop border.
+     1. Foreground = normalised Lab distance from the linen, whose
+        colour is the dominant chroma mode of the whole panel.
+     2. The foreground is sorted into colour families. A bloom is a
+        contiguous patch of ANY petal colour -- the white irises have
+        purple outlines, so one colour alone shatters them.
+     3. A bloom is closed across whatever crosses it, then intersected
+        back with the foreground: crossing wool is kept in its own
+        colour, crossing linen is not. Occluders stay put on purpose.
+     4. Fused heads are separated by watershed on the distance
+        transform, accepted on a share of the parent rather than a
+        pixel count so the rule fits both fat daffodils and slim irises.
      5. Brightness and saturation graded in at bake time, so the
         browser does no per-frame colour work.
    The ground is a 512px square of the cleanest bare linen in either
@@ -101,7 +141,9 @@
 
    Nothing here is drawn by hand. Every pixel is wool.
 
-   window.regrow()  -- resow the field without reloading
+   window.regrow()      -- resow the field without reloading
+   window.density()     -- governor state
+   window.tune(obj)     -- apply a saved tuning JSON
 ================================================================== */
 
 /* Served from a dev server, the payload is fetched. In dist/ it has been
@@ -122,13 +164,53 @@ const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const hint    = document.getElementById('hint');
 const loading = document.getElementById('loading');
 
-const rnd = (a,b)=>a+Math.random()*(b-a);
+const rnd  = (a,b)=>a+Math.random()*(b-a);
+const pick = arr=>arr[(Math.random()*arr.length)|0];
 
-const SHRINK = 0.30;   // assets draw at 30% of source size
+const SHRINK = 0.30;   // assets draw at 30% of source size, before P.size
 
-/* ---------- load ------------------------------------------------ */
+/* ---------- tunable ---------------------------------------------- */
+/* Everything the panel drives. window.tune(obj) applies a saved set. */
+const DEFAULTS = {
+  rustle:  1.00,   // how hard the cursor knocks a plant
+  settle:  1.00,   // how long it keeps swaying afterwards
+  ground:  0.42,   // linen tile scale. lower = finer weave, more zoomed out
+  br: 1.00, bg: 1.00, bb: 1.00,   // background channel gains
+  fr: 1.00, fg: 1.00, fb: 1.00,   // plant channel gains
+  density: 1.00,
+  size:    1.00,
+  /* The governor thins the field to hold frame rate. It is why plants
+     can vanish a few seconds after load on a big window. Off = draw
+     everything sown, whatever it costs. */
+  autothin: 1
+};
+const P = {...DEFAULTS};
+
+/* Plants are sown in clusters, not one at a time: a flower head is
+   paired with a stem beneath it, and heads come 1-3 to a clump. */
+const CLUSTER = {flower:[1,3], grass:[2,4]};
+const STEM_PAIR = 0.85;         // chance a head gets a stem under it
+
+/* ---------- load ------------------------------------------------- */
 function loadImg(src){
   return new Promise(res=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=()=>res(null); i.src=src; });
+}
+
+/* Per-channel gain. Alpha is left alone, so cutouts keep their edges. */
+function tint(img, r, g, b){
+  const c = document.createElement('canvas');
+  c.width = img.width; c.height = img.height;
+  const g2 = c.getContext('2d', {willReadFrequently:true});
+  g2.drawImage(img, 0, 0);
+  if(r===1 && g===1 && b===1) return c;
+  const d = g2.getImageData(0, 0, c.width, c.height), px = d.data;
+  for(let i=0;i<px.length;i+=4){
+    px[i]   = Math.min(255, px[i]  *r);
+    px[i+1] = Math.min(255, px[i+1]*g);
+    px[i+2] = Math.min(255, px[i+2]*b);
+  }
+  g2.putImageData(d, 0, 0);
+  return c;
 }
 
 /* Bake each asset once, at the size it will actually be drawn, with
@@ -137,13 +219,13 @@ function loadImg(src){
 function bakePlant(img, dw, dh){
   const q  = Math.min(2.2, (devicePixelRatio||1)*1.2);
   const mw = Math.max(2, Math.round(dw*q)), mh = Math.max(2, Math.round(dh*q));
-  const P  = Math.max(3, Math.round(4*q));
+  const P2 = Math.max(3, Math.round(4*q));
 
   const sil = document.createElement('canvas');
-  sil.width = mw + P*2; sil.height = mh + P*2;
+  sil.width = mw + P2*2; sil.height = mh + P2*2;
   const sg = sil.getContext('2d');
   sg.imageSmoothingQuality = 'high';
-  sg.drawImage(img, P, P, mw, mh);
+  sg.drawImage(img, P2, P2, mw, mh);
   sg.globalCompositeOperation = 'source-in';
   sg.fillStyle = 'rgba(26,19,11,.34)';
   sg.fillRect(0, 0, sil.width, sil.height);
@@ -155,57 +237,103 @@ function bakePlant(img, dw, dh){
   try { g.filter = 'blur(' + (3*q).toFixed(1) + 'px)'; } catch(e){}
   g.drawImage(sil, 1.6*q, 2.2*q);
   try { g.filter = 'none'; } catch(e){}
-  g.drawImage(img, P, P, mw, mh);
+  g.drawImage(img, P2, P2, mw, mh);
 
-  const pd = P*dw/mw;                        // pad, in display px
+  const pd = P2*dw/mw;                       // pad, in display px
   return {cv:out, pd, w: dw + pd*2, h: dh + pd*2};
 }
 
-let ASSETS = [], linenPat = null;
+let ASSETS = [], linenImg = null, linenPat = null;
+
+/* ASSETS objects are created once and mutated in place, so a colour or
+   size change re-bakes the sprites without disturbing the field the
+   plants are already standing in. */
+function rebakePlants(){
+  ASSETS.forEach(a=>{
+    const sc = SHRINK * P.size;
+    const dw = a.w*sc, dh = a.h*sc;
+    const b  = bakePlant(tint(a.img, P.fr, P.fg, P.fb), dw, dh);
+    a.dw = dw; a.dh = dh; a.stem = a.stemSrc*sc;
+    a.cv = b.cv; a.pd = b.pd; a.cw = b.w; a.ch = b.h;
+    a.dx = -dw/2 - b.pd; a.dy = -dh - a.stem - b.pd;
+  });
+}
+
+/* Tinted and pre-scaled to an integer tile, so repeating never seams.
+   P.ground below 1 shrinks the weave -- the panel is shot close, and at
+   1:1 the linen reads as burlap rather than as ground seen from above. */
+function rebakeGround(){
+  if(!linenImg) return;
+  const t = tint(linenImg, P.br, P.bg, P.bb);
+  const s = Math.max(24, Math.round(t.width * P.ground));
+  const c = document.createElement('canvas');
+  c.width = s; c.height = s;
+  const g = c.getContext('2d');
+  g.imageSmoothingQuality = 'high';
+  g.drawImage(t, 0, 0, s, s);
+  linenPat = ctx.createPattern(c, 'repeat');
+}
 
 async function boot(){
   try { DATA = await loadData(); }
   catch(e){ loading.textContent = e.message; console.error(e); return; }
-  const linen = await loadImg(DATA.linen);
-  const imgs  = await Promise.all(DATA.assets.map(a=>loadImg(a.d)));
+  linenImg   = await loadImg(DATA.linen);
+  const imgs = await Promise.all(DATA.assets.map(a=>loadImg(a.d)));
   DATA.assets.forEach((a,i)=>{
     if(!imgs[i]) return;
-    const dw = a.w*SHRINK, dh = a.h*SHRINK;
-    const b  = bakePlant(imgs[i], dw, dh);
-    const stem = a.stem*SHRINK;
-    ASSETS.push({...a, dw, dh, stem, cv:b.cv, pd:b.pd, cw:b.w, ch:b.h,
-                 dx: -dw/2 - b.pd, dy: -dh - stem - b.pd});
+    ASSETS.push({...a, img: imgs[i], stemSrc: a.stem});
   });
-  if(linen) linenPat = ctx.createPattern(linen,'repeat');
+  rebakePlants();
+  rebakeGround();
+  buildPanel();
   loading.dataset.done = 'true';
   resize();
   requestAnimationFrame(frame);
 }
 
-/* ---------- field ----------------------------------------------- */
+/* ---------- field ------------------------------------------------ */
 let W=0, H=0, DPR=1, plants=[], vig=null;
 
 /* Relative density per role, normalised by how many assets that role has,
-   so adding assets to a role makes it more varied rather than denser.
-   'stem' is several blades from one root; 'grass' is a single blade, for
-   tufts. They are separate roles so the two can be dialled independently. */
+   so adding assets to a role makes it more varied rather than denser. */
 const WEIGHT = {grass:5.0, stem:3.2, small:2.0, clump:1.0, flower:2.3};
 
-/* Uniform random scatter reads as wallpaper. A meadow grows in
-   colonies, so each asset picks a few patches it prefers, and a
-   coarse spatial grid stops neighbours stacking. New every load. */
+/* A meadow does not grow one stem at a time. Plants are sown in
+   clusters: a head with a stem under it, 1-3 heads to a clump, 2-4
+   blades to a tuft. Clusters are then scattered by colony, so like
+   still grows near like. */
 function seed(){
   plants = [];
   if(!ASSETS.length) return;
 
   const byRole = {};
   ASSETS.forEach(a=>(byRole[a.role] = byRole[a.role] || []).push(a));
-  const pool = [];
-  Object.keys(byRole).forEach(role=>{
-    const set  = byRole[role];
-    const reps = Math.max(1, Math.round((WEIGHT[role]||1)*30/set.length));
-    set.forEach(a=>{ for(let i=0;i<reps;i++) pool.push(a); });
-  });
+  const heads  = [].concat(byRole.flower||[], byRole.small||[], byRole.clump||[]);
+  const stems  = byRole.stem  || [];
+  const blades = byRole.grass || [];
+  if(!heads.length && !blades.length) return;
+
+  /* Repeat each asset in its pool by role weight, normalised by how many
+     assets that role has -- so adding assets makes a role more varied
+     rather than denser. */
+  function pool(list){
+    const out = [], by = {};
+    list.forEach(a=>(by[a.role] = by[a.role] || []).push(a));
+    Object.keys(by).forEach(role=>{
+      const set = by[role];
+      const reps = Math.max(1, Math.round((WEIGHT[role]||1)*30/set.length));
+      set.forEach(a=>{ for(let i=0;i<reps;i++) out.push(a); });
+    });
+    return out;
+  }
+  const headPool = pool(heads), bladePool = pool(blades);
+
+  /* Weights are shares of PLANTS, but we sow whole clusters, so divide
+     each side by how many plants its cluster typically holds. */
+  const perFlower = (CLUSTER.flower[0]+CLUSTER.flower[1])/2 * (1 + STEM_PAIR);
+  const perGrass  = (CLUSTER.grass[0] +CLUSTER.grass[1]) /2;
+  const wG = bladePool.length/perGrass, wF = headPool.length/perFlower;
+  const grassShare = (wG + wF) > 0 ? wG/(wG + wF) : 0;
 
   const span = Math.min(W,H);
   const colony = new Map();
@@ -217,7 +345,7 @@ function seed(){
     colony.set(a, cs);
   });
 
-  const n  = Math.min(2600, Math.max(320, Math.round(W*H/700)));
+  const target = Math.min(3200, Math.max(260, Math.round(W*H/700*P.density)));
   const rx = Math.min(W*0.20, 205), ry = Math.min(H*0.085, 62);
 
   const CELL = 16, grid = new Map();
@@ -234,40 +362,79 @@ function seed(){
     return false;
   }
 
-  for(let guard=0; plants.length<n && guard<n*6; guard++){
-    const a = pool[(Math.random()*pool.length)|0];
-    let x, y;
-    if(Math.random() < 0.60){                       // grow near its own kind
-      const cs = colony.get(a), c = cs[(Math.random()*cs.length)|0];
-      const th = Math.random()*Math.PI*2;
-      const d  = Math.abs(rnd(-1,1)+rnd(-1,1))*0.5*c.r;
-      x = c.x + Math.cos(th)*d; y = c.y + Math.sin(th)*d;
-    } else {                                        // volunteers
-      x = rnd(-W*0.10, W*1.10); y = rnd(-H*0.14, H*1.14);
-    }
-    if(y < -H*0.16 || y > H*1.16 || x < -W*0.14 || x > W*1.14) continue;
-
-    const q = Math.hypot((x-W/2)/rx, (y-H*0.5)/ry);
-    if(q < 1 && Math.random() > Math.pow(q,1.15)) continue;   // clearing for the name
-
+  /* One rank for the whole cluster, so when the governor thins the
+     field it drops whole plants and never a head without its stem. */
+  /* free = skip the crowding test and stay out of the grid. Used for a
+     head's companion stem, which is meant to sit directly under it: if
+     the stem goes down first and takes part in the test, it blocks the
+     very head it belongs to and almost no flowers survive. */
+  function place(a, x, y, sc, rank, free){
+    if(!free && crowded(x, y, Math.max(4, a.dw*sc*0.32))) return false;
     const depth = Math.min(1, Math.max(0, (y + H*0.14)/(H*1.28)));
-    const sc = (0.70 + depth*0.34) * rnd(0.80,1.24);
-    if(crowded(x, y, Math.max(5, a.dw*sc*0.34))) continue;
-
     const p = {
       a, x, y, s: sc,
       flip: Math.random() < 0.5 ? -1 : 1,
       lean: rnd(-0.13, 0.13),
       fade: 0.80 + depth*0.20,
-      rank: Math.random(),
+      rank,
       phase: Math.random()*Math.PI*2,
       stiff: rnd(46,84), damp: rnd(5.0,7.4),
       bend:0, bendV:0, buzz:0
     };
     plants.push(p);
-    const k = (((x/CELL)|0) + ',' + ((y/CELL)|0));
-    if(!grid.has(k)) grid.set(k, []);
-    grid.get(k).push(p);
+    if(!free){
+      const k = (((x/CELL)|0) + ',' + ((y/CELL)|0));
+      if(!grid.has(k)) grid.set(k, []);
+      grid.get(k).push(p);
+    }
+    return true;
+  }
+
+  let guard = 0;
+  while(plants.length < target && guard++ < target*5){
+    const asGrass = bladePool.length && (!headPool.length || Math.random() < grassShare);
+    const set  = asGrass ? bladePool : headPool;
+    const lead = pick(set);
+
+    let cx, cy;
+    if(Math.random() < 0.62){                       // grow near its own kind
+      const cs = colony.get(lead), c = cs[(Math.random()*cs.length)|0];
+      const th = Math.random()*Math.PI*2;
+      const d  = Math.abs(rnd(-1,1)+rnd(-1,1))*0.5*c.r;
+      cx = c.x + Math.cos(th)*d; cy = c.y + Math.sin(th)*d;
+    } else {                                        // volunteers
+      cx = rnd(-W*0.10, W*1.10); cy = rnd(-H*0.14, H*1.14);
+    }
+    if(cy < -H*0.16 || cy > H*1.16 || cx < -W*0.14 || cx > W*1.14) continue;
+
+    const q = Math.hypot((cx-W/2)/rx, (cy-H*0.5)/ry);
+    if(q < 1 && Math.random() > Math.pow(q,1.15)) continue;   // clearing for the name
+
+    const [lo,hi] = asGrass ? CLUSTER.grass : CLUSTER.flower;
+    const k    = lo + ((Math.random()*(hi-lo+1))|0);
+    const wide = lead.dw * (asGrass ? 0.62 : 0.80);
+
+    for(let i=0;i<k;i++){
+      const a = i === 0 ? lead : pick(set);
+      const x = cx + (i===0 ? 0 : rnd(-wide, wide));
+      const y = cy + (i===0 ? 0 : rnd(-wide*0.42, wide*0.42));
+      if(y < -H*0.16 || y > H*1.16) continue;
+      const depth = Math.min(1, Math.max(0, (y + H*0.14)/(H*1.28)));
+      const sc = (0.70 + depth*0.34) * rnd(0.80,1.24);
+      /* Rank is shared by a head and its own stem, so thinning never
+         leaves a flower floating over nothing -- but NOT shared across
+         the cluster, or the governor would drop whole clumps at once
+         and the field would visibly lose patches. */
+      const rank = Math.random();
+
+      /* Head first, so it competes for the space on its own terms. Its
+         stem then goes in unconditionally at a hair smaller y, which is
+         what puts it behind the head once plants are sorted for drawing. */
+      if(place(a, x, y, sc, rank, false)
+         && !asGrass && stems.length && Math.random() < STEM_PAIR){
+        place(pick(stems), x + rnd(-3,3), y - 0.5, sc*rnd(0.82,1.06), rank, true);
+      }
+    }
   }
   plants.sort((p,q)=>p.y-q.y);
 }
@@ -294,7 +461,7 @@ function windAt(x,y,t){
        + Math.sin((x+y*0.6)*0.0015 + t*0.19)*0.40;
 }
 
-/* ---------- the brush ------------------------------------------- */
+/* ---------- the brush -------------------------------------------- */
 const ptr = {x:-9999,y:-9999,px:-9999,py:-9999,vx:0,vy:0,live:false,touched:false};
 const ghost = {t:Math.random()*100, on:false};
 
@@ -315,24 +482,31 @@ setTimeout(()=>{ if(!ptr.touched){ ghost.on=true; ptr.live=true; hint.dataset.do
 const BRUSH = 150;
 const FORCE = 0.070;
 
-/* ---------- loop ------------------------------------------------ */
+/* ---------- loop ------------------------------------------------- */
 let last = performance.now(), t = 0;
 
 /* Sow for the densest meadow, then let the machine tell us how much
    of it it can actually hold. Fast hardware draws the lot; slower
    hardware thins out uniformly instead of stuttering. */
-let quality = 1, acc = 0, ticks = 0;
+let quality = 1, qTarget = 1, acc = 0, ticks = 0;
 let warm = 0;
+const FADE = 0.10;    // plants near the cut fade rather than vanish
+
 function govern(dt){
   warm += dt;
-  if(warm < 1.5) return;                      // ignore load-time hitches
+  /* Ease toward the target instead of stepping to it. A step drops a
+     whole band of ranks between one frame and the next, which is what
+     made thinning read as chunks of the meadow disappearing. */
+  quality += (qTarget - quality) * Math.min(1, dt*0.9);
+  if(warm < 2.5) return;                      // ignore load-time hitches
+  if(!P.autothin){ qTarget = 1; return; }
   acc += dt; ticks++;
-  if(acc < 0.6) return;
+  if(acc < 1.0) return;
   const ms = (acc/ticks)*1000;
-  if(ms > 24 || ms < 15){                     // only act outside 42-66fps
-    const f = Math.max(0.72, Math.min(1.05, 19/ms));
-    quality = Math.max(0.34, Math.min(1, quality*f));
-  }
+  /* Only act on a real problem. The old band (42-66fps) meant a machine
+     holding a perfectly good 58fps was still being thinned. */
+  if(ms > 30)      qTarget = Math.max(0.40, qTarget * Math.max(0.88, 24/ms));
+  else if(ms < 20) qTarget = Math.min(1, qTarget * 1.06);
   acc = 0; ticks = 0;
 }
 window.density = ()=>({quality:+quality.toFixed(2), sown:plants.length,
@@ -354,6 +528,11 @@ function frame(now){
   const speed = Math.hypot(ptr.vx, ptr.vy);
   const brushing = ptr.live && speed > 0.05;
 
+  /* P.settle stretches how long a knocked plant keeps moving: it
+     softens the spring damping and slows the shiver decay together. */
+  const dampK = 1/Math.max(0.2, P.settle);
+  const buzzK = Math.pow(0.055, dt*dampK);
+
   ctx.setTransform(DPR,0,0,DPR,0,0);
   ctx.globalAlpha = 1;
   if(linenPat){ ctx.fillStyle = linenPat; ctx.fillRect(0,0,W,H); }
@@ -361,6 +540,9 @@ function frame(now){
   for(let i=0;i<plants.length;i++){
     const p = plants[i];
     if(p.rank > quality) continue;
+    /* Plants within FADE of the cut are drawn translucent, so when the
+       governor moves, the field thins in and out instead of popping. */
+    const qa = p.rank > quality - FADE ? (quality - p.rank)/FADE : 1;
     const a = p.a;
     const rad = (a.dh + a.stem)*p.s + 24;
     if(p.x < -rad || p.x > W+rad || p.y < -rad || p.y > H+rad) continue;
@@ -375,13 +557,13 @@ function frame(now){
           const fall = 1 - d/BRUSH;
           const dirx = d > 0.001 ? dx/d : 0;
           const hit  = fall*fall*Math.min(1, speed/13);
-          p.bendV += (ptr.vx*0.012 + dirx*0.9) * hit * FORCE;
-          p.buzz = Math.min(1, p.buzz + hit*0.75);   // wool shiver
+          p.bendV += (ptr.vx*0.012 + dirx*0.9) * hit * FORCE * P.rustle;
+          p.buzz = Math.min(1, p.buzz + hit*0.75*P.rustle);   // wool shiver
         }
       }
-      const acc = -p.stiff*(p.bend - rest) - p.damp*p.bendV;
+      const acc = -p.stiff*(p.bend - rest) - p.damp*dampK*p.bendV;
       p.bendV += acc*dt; p.bend += p.bendV*dt;
-      p.buzz *= Math.pow(0.055, dt);
+      p.buzz *= buzzK;
       if(p.bend >  0.5){ p.bend =  0.5; p.bendV *= -0.3; }
       if(p.bend < -0.5){ p.bend = -0.5; p.bendV *= -0.3; }
     }
@@ -390,7 +572,7 @@ function frame(now){
     const ang = p.lean + (p.bend + shiver) * (a.stem > 0 ? 0.85 : 0.60);
     const co = Math.cos(ang)*p.s, si = Math.sin(ang)*p.s;
 
-    ctx.globalAlpha = p.fade;
+    ctx.globalAlpha = p.fade * qa;
     ctx.setTransform(DPR*co*p.flip, DPR*si*p.flip, -DPR*si, DPR*co, DPR*p.x, DPR*p.y);
     ctx.drawImage(a.cv, a.dx, a.dy, a.cw, a.ch);
   }
@@ -401,6 +583,134 @@ function frame(now){
 
   requestAnimationFrame(frame);
 }
+
+/* ---------- tuning panel ----------------------------------------- */
+/* key, label, min, max, step, what changing it costs */
+const CONTROLS = [
+  ['rustle',  'rustle amount',    0,    3,    0.05, 'live'],
+  ['settle',  'rustle duration',  0.2,  4,    0.05, 'live'],
+  ['ground',  'background zoom',  0.12, 1.5,  0.01, 'ground'],
+  ['br',      'background R',     0,    2,    0.01, 'ground'],
+  ['bg',      'background G',     0,    2,    0.01, 'ground'],
+  ['bb',      'background B',     0,    2,    0.01, 'ground'],
+  ['fr',      'plants R',         0,    2,    0.01, 'plants'],
+  ['fg',      'plants G',         0,    2,    0.01, 'plants'],
+  ['fb',      'plants B',         0,    2,    0.01, 'plants'],
+  ['density', 'density',          0.2,  2.5,  0.05, 'regrow'],
+  ['size',    'size',             0.4,  2,    0.02, 'plants'],
+  ['autothin','auto-thin to hold fps', 0, 1,  1,    'live']
+];
+const panel = document.getElementById('tune');
+const inputs = {};
+let pending = null;
+
+/* Re-baking every sprite on each pixel of slider travel would stutter,
+   so the expensive half is coalesced onto the next frame. */
+function schedule(kind){
+  pending = pending === 'plants' || kind === 'plants' ? 'plants' : kind;
+  if(schedule.queued) return;
+  schedule.queued = true;
+  requestAnimationFrame(()=>{
+    schedule.queued = false;
+    if(pending === 'plants') rebakePlants();
+    if(pending === 'plants' || pending === 'ground') rebakeGround();
+    pending = null;
+  });
+}
+
+function syncPanel(){
+  CONTROLS.forEach(([k])=>{
+    const i = inputs[k];
+    if(!i) return;
+    if(i.toggle){ i.el.checked = !!P[k]; }
+    else { i.el.value = P[k]; i.out.textContent = (+P[k]).toFixed(2); }
+  });
+}
+
+function buildPanel(){
+  const body = document.getElementById('tuneBody');
+  let group = null;
+  CONTROLS.forEach(([k, label, min, max, step, cost], i)=>{
+    if(i===0 || i===2 || i===6 || i===9){
+      group = document.createElement('div');
+      group.className = 'grp';
+      body.appendChild(group);
+    }
+    const toggle = (min===0 && max===1 && step===1);
+    const lab = document.createElement('label');
+    lab.innerHTML = '<span class="lab">' + label + '<b></b></span>';
+    const el = document.createElement('input');
+    if(toggle){
+      el.type = 'checkbox'; el.checked = !!P[k];
+      el.style.cssText = 'width:auto;margin:0;vertical-align:middle';
+      lab.querySelector('.lab').prepend(el);
+    } else {
+      el.type='range'; el.min=min; el.max=max; el.step=step; el.value=P[k];
+      lab.appendChild(el);
+    }
+    group.appendChild(lab);
+    const out = lab.querySelector('b');
+    out.textContent = toggle ? '' : (+P[k]).toFixed(2);
+    inputs[k] = {el, out, toggle};
+    el.addEventListener('input', ()=>{
+      P[k] = toggle ? (el.checked ? 1 : 0) : +el.value;
+      if(!toggle) out.textContent = P[k].toFixed(2);
+      if(cost === 'ground' || cost === 'plants') schedule(cost);
+    });
+  });
+
+  /* Live readout, so the governor thinning the field is visible as a
+     number rather than as plants mysteriously going missing. */
+  const stat = document.createElement('p');
+  stat.className = 'note';
+  body.appendChild(stat);
+  let sLast = performance.now(), sMs = 16.7;
+  (function statTick(){
+    const now = performance.now();
+    sMs = sMs*0.92 + (now - sLast)*0.08; sLast = now;
+    if(!panel.hidden){
+      const d = density();
+      stat.textContent = Math.round(1000/sMs) + ' fps  ·  ' + d.drawn + '/' + d.sown
+                       + ' drawn  ·  quality ' + d.quality.toFixed(2);
+    }
+    requestAnimationFrame(statTick);
+  })();
+
+  document.getElementById('tRegrow').onclick = ()=>seed();
+  document.getElementById('tReset').onclick  = ()=>{
+    Object.assign(P, DEFAULTS); syncPanel(); rebakePlants(); rebakeGround(); seed();
+  };
+  document.getElementById('tCopy').onclick = async ()=>{
+    const txt = JSON.stringify(P, null, 2);
+    const note = document.getElementById('tuneNote');
+    try { await navigator.clipboard.writeText(txt); note.textContent = 'copied. paste it back to persist.'; }
+    catch(e){
+      const ta = document.createElement('textarea');
+      ta.value = txt; document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); note.textContent = 'copied. paste it back to persist.'; }
+      catch(e2){ note.textContent = 'copy failed -- see console'; console.log(txt); }
+      ta.remove();
+    }
+    setTimeout(()=>{ note.textContent = 'density and size need a regrow. everything else is live.'; }, 4000);
+  };
+
+  const show = v=>{ panel.hidden = !v; };
+  document.getElementById('tuneOpen').onclick = ()=>show(panel.hidden);
+  addEventListener('keydown', e=>{
+    if(e.key === 'c' && !e.metaKey && !e.ctrlKey && !e.altKey) show(panel.hidden);
+    if(e.key === 'Escape') show(false);
+  });
+  if(location.hash.includes('tune') ||
+     location.hostname === 'localhost' || location.hostname === '127.0.0.1') show(true);
+}
+
+/* Apply a saved set: window.tune({...}) */
+window.tune = obj=>{
+  if(!obj || typeof obj !== 'object') return {...P};
+  Object.keys(DEFAULTS).forEach(k=>{ if(typeof obj[k] === 'number') P[k] = obj[k]; });
+  syncPanel(); rebakePlants(); rebakeGround(); seed();
+  return {...P};
+};
 
 boot();
 </script>

@@ -60,7 +60,19 @@ first for what the project is and how to run it.
   `save/translate/rotate/scale/restore`.
 - **DPR capped at 1.5.** Biggest single saving on retina; the wool sprites
   are soft enough that 2.0 buys nothing visible.
-- **Density governor** rather than a fixed plant count — see README.
+- **Density governor** rather than a fixed plant count — see README. It
+  eases toward its target and fades plants near the cut rather than
+  stepping; a step drops a whole band of ranks between two frames, which
+  the user reported as the meadow losing chunks a few seconds after load.
+  It also only acts below ~33fps now. The old band (42–66fps) meant a
+  machine holding a perfectly good 58fps was still being thinned.
+- **Plants are sown in clusters, not one at a time.** A head with a stem
+  under it, 1–3 heads to a clump, 2–4 blades to a tuft. The head is
+  placed first and its companion stem skips the crowding test — put the
+  stem down first and it blocks the very head it belongs to, which cut
+  flowers to 8 out of 415.
+- **Rank is shared by a head and its own stem, and nothing else.** Share
+  it across a whole cluster and the governor drops entire clumps at once.
 
 ## Known issues, not yet fixed
 

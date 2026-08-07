@@ -127,6 +127,25 @@ stuttering. `density()` in the console reports what's happening.
 |---|---|
 | `regrow()` | resow the field without reloading |
 | `density()` | `{quality, sown, drawn}` — governor state |
+| `tune(obj)` | apply a saved tuning JSON; returns the current one |
+
+## Tuning panel
+
+Press `c`, click the dot in the top-right corner, or add `#tune` to the
+URL. It opens by itself on localhost. Sliders for rustle, background
+zoom, per-channel colour on the ground and the plants, density and size,
+plus a live fps / drawn / quality readout.
+
+**Copy json** puts the whole set on the clipboard. Paste it back and it
+can be made the default in `DEFAULTS` at the top of the script; or apply
+it at runtime with `tune({...})`.
+
+Density and size need a **regrow**; everything else applies live.
+
+*Auto-thin* is the density governor. It samples frame time and drops
+plants to hold frame rate — if the field looks like it is losing patches
+a few seconds after load, that is what is doing it. Turn it off to draw
+everything sown, whatever it costs.
 
 Keys worth tuning live at the top of their sections in `src/index.html`:
 `SHRINK`, `WEIGHT`, `BRUSH`, `FORCE`, and the sowing target inside `seed()`.
