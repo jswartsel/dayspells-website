@@ -32,10 +32,14 @@ or `pipeline/config.py` change.
 python pipeline/extract.py all
 ```
 
-Stages, runnable individually: `grid`, `flatten`, `flowers`, `foliage`,
-`linen`, `sheet`. Intermediates go to `work/` (gitignored). Always finish
-with `sheet` — it renders every asset on a checkerboard, which is the only
-reliable way to spot bad alpha.
+Stages, runnable individually: `mask`, `blooms`, `grass`, `linen`,
+`sheet`. Intermediates go to `work/` (gitignored). Always finish with
+`sheet` — it renders every asset on a checkerboard, which is the only
+reliable way to spot bad alpha. Read it, then edit `config.KEEP`.
+
+Extraction is fully automatic: no frame corners and no per-flower seed
+points to measure. `config.py` holds thresholds and the curation list,
+nothing hand-located.
 
 ### Headless checks
 
@@ -55,8 +59,8 @@ renders a heatmap of what moved under the cursor.
 ```
 photos/           the two source photographs (EXIF-rotated on read)
 pipeline/
-  config.py       every hand-measured number: frame corners, flower seed
-                  points, which assets are keepers, the colour grade
+  config.py       thresholds, the colour grade, and which assets are
+                  keepers. Nothing in here is hand-located.
   extract.py      photos -> isolated transparent PNGs
   build.py        PNGs -> payload.json -> single-file dist
 src/index.html    the page. One file: markup, style, and the field engine
@@ -68,24 +72,35 @@ work/             intermediates and screenshots (gitignored)
 
 ## How the extraction works
 
-1. **Rectify.** Perspective-warp off the frame corners so each panel is a
-   flat 1300×3050 rectangle. ~87px per cm of real embroidery.
-2. **Relight.** Flatten luminance against a heavy blur of itself. Only
-   luminance — correcting the full colour field turns the pink irises mint.
-3. **Segment.** Foreground is normalised Lab distance from a linen
-   reference sampled at the panel margins, measured on a bilateral-filtered
-   copy so the weave doesn't register as signal.
-4. **Isolate.** The hard part. Everything connects through stems, so a
-   flood fill from one flower grabs the whole plant. Erode until the stems
-   snap, keep the blob nearest the seed point, reconstruct it back under
-   the mask. Erosion radius must exceed half the stem width (~40px here).
-   The extractor sweeps cut depth and scores each result on how much of the
-   silhouette runs along the crop border — a real flower silhouette never
-   does, so border contact is a reliable proxy for "grabbed the neighbours".
+1. **Segment.** Foreground is normalised Lab distance from the linen,
+   measured on a bilateral-filtered copy so the weave doesn't register as
+   signal. The linen reference is the dominant chroma mode of the whole
+   panel — *not* a sample of the margins, which silently poisons the whole
+   segmentation if any stitching runs to the edge, and on these panels it
+   does.
+2. **Sort by colour.** Split the foreground into families — dark, green,
+   yellow, white, purple, pink. Chroma is what actually separates wool
+   here; topology is not.
+3. **Cut the blooms.** A bloom is a contiguous patch of *any* petal
+   colour. Componenting a single colour shatters the white irises, whose
+   petals are separated by purple outlines. Close across whatever crosses
+   the bloom, then intersect back with the foreground: crossing **wool**
+   is kept, in its own colour, and crossing **linen** is not. An occluding
+   stem stays put and reads as a stem lying over the flower.
+4. **Cut the grass.** Green stems and leaves are emitted as assets in
+   their own right, so the page can scatter grass and flowers at
+   independent densities. They remain part of the blooms they belong to.
 5. **Ground.** Search both panels for the 512px square with the least
    stitching, inpaint out any strays, then make it tile by rolling half a
    tile and cross-fading the seam. Mirror-tiling is the obvious trick and
    it's wrong — it makes four-fold symmetric blobs that read as wallpaper.
+
+An earlier version rectified off hand-read frame corners and isolated
+flowers by eroding until the stems snapped, keeping only the blob nearest
+a hand-placed seed. Both are gone. The panels are now shot square-on, so
+there is nothing to rectify; and severing plants from each other is no
+longer wanted, which turned the hardest stage into the simplest one and
+recovered the flowers the old approach had to reject.
 
 ## How the page works
 

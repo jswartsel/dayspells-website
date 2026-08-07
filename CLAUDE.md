@@ -23,11 +23,20 @@ first for what the project is and how to run it.
 
 ## Decisions already made, and why
 
-- **Luminance-only relight.** Correcting the full colour field neutralised
-  the linen but turned the pink irises mint. Don't "improve" this.
-- **Erode-and-reconstruct isolation.** Cut depth must exceed half the stem
-  width. A first attempt at ~16px radius did nothing; the working range is
-  a swept 15–103px kernel, scored on crop-border contact.
+- **Occluders are kept, on purpose.** The user asked for flowers cut even
+  when lines break them up, "leaving whatever overlapping color exists
+  there" — they like the weirdness. So a bloom is closed across whatever
+  crosses it and intersected back with the foreground. Do not reintroduce
+  anything that severs plants from each other.
+- **A bloom is any petal colour, not one colour.** The white irises have
+  purple outlines around every petal; componenting the white family alone
+  shatters them into eleven fragments.
+- **Linen reference is the panel's dominant chroma mode**, not a margin
+  sample. Margin sampling assumes a clean unstitched border and fails
+  silently — degrading the segmentation everywhere, not just at the edge.
+- **Colour families are HSV gates** in `config.FAMILIES`. The green gate
+  is what makes grass separable; a white-balance shift will slide greens
+  out of it and grass extraction will quietly return nothing.
 - **Colour grade is baked into the assets** (`config.GRADE`), not applied
   as a CSS `filter` on the canvas. A compositor filter over a full-screen
   canvas costs on every frame; this costs nothing.
@@ -40,23 +49,27 @@ first for what the project is and how to run it.
 
 ## Known issues, not yet fixed
 
-The user has said there are glitches they want to circle back to. These are
-the ones already identified:
-
-1. **Crocus cutouts carry faint linen fringe** at the petal edges. The
-   brightness gate (`config.V_GATE`) that saves them from the near-black
-   foliage also lets some ground through.
-2. **Rejected assets.** `iris-purple-b`, `iris-pink-b`, `iris-white-b`,
-   `daffodil-a`, `daffodil-b`, `narcissus-b/c/d`, `crocus-a` all failed
-   extraction — the flower sits too deep in surrounding foliage, so the
-   erosion that severs the stems also eats the petals. Worth another pass
-   with a different approach; the palette is currently short on pink and
-   white irises as a result.
-3. **The clearing behind the wordmark can read as a bald patch** on some
+1. **`GRADE` is tuned for the old, darker panels and now overshoots.** The
+   2026 linen is `#e3cf86` as shot; the grade pushes the ground tile to
+   `#fbdd7e`, a much brighter, more clipped yellow. The old panels' linen
+   was olive `#8c762d`, so the page's whole mood has shifted paler. This
+   is a look decision, not a bug — flagged with the user, not yet settled.
+2. **Some blooms merge.** `daffodil-a` is a daffodil and a narcissus
+   together; `iris-white-b` is a purple iris over a pink one. They're
+   curated as `clump`, which is fine, but a watershed split on the
+   distance transform would separate them if wanted.
+3. **Faint linen fringe** survives on a few petal tips (the crocuses, and
+   `iris-pink-c` which was rejected for it). Raising `FG_THRESHOLD` trades
+   it against eating thin stems.
+4. **The clearing behind the wordmark can read as a bald patch** on some
    seeds. It's density thinning (an ellipse in `seed()`), not a wash.
-4. **Faint vertical slub in the ground tile** repeats at 512px. It's real
+5. **Faint vertical slub in the ground tile** repeats at 512px. It's real
    fabric texture, but visible on narrow viewports.
-5. **Only 18 assets** — colonies help disguise it, but repeats are findable.
+
+Fixed since the first pass: the crocus linen fringe is much reduced, and
+the "rejected assets" list is gone entirely — the flowers that sat too
+deep in foliage now extract fine, because nothing severs stems any more.
+27 assets in the payload, up from 18.
 
 ## Environment gotchas
 
