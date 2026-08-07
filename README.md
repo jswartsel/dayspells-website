@@ -132,15 +132,38 @@ stuttering. `density()` in the console reports what's happening.
 ## Tuning panel
 
 Press `c`, click the dot in the top-right corner, or add `#tune` to the
-URL. It opens by itself on localhost. Sliders for rustle, background
-zoom, per-channel colour on the ground and the plants, density and size,
-plus a live fps / drawn / quality readout.
+URL. It opens by itself on localhost.
+
+| group | |
+|---|---|
+| **rustle** | amount, speed, duration, radius |
+| **colour** | a tint swatch and a gain, for ground and for plants |
+| **field** | ground zoom, density |
+| **grow in** | size start, size end, seconds |
+| | auto-thin, and a live fps / drawn / quality readout |
+
+Colour is a **tint plus a gain** rather than three channel sliders. The
+tint is normalised to its brightest channel, so it carries hue only and
+white is exactly neutral at any gain; the gain does brightness. Two
+controls instead of three, and you pick the colour by looking at it.
+
+**Rustle amount** is a gain on the drawn angle, not just a harder shove.
+Driving it through the impulse alone doesn't work — a plant is inside the
+brush for only a few frames and the spring pulls back the whole time, so
+the response is either dead at the bottom or a cliff at the top. Measured
+lean at the maximum setting: 1.2° / 3.5° / 10.3° / 29.4° / 69.2° across
+0.5–4.
+
+**Grow in** ramps the field up from `size start` to `size end` over
+`seconds`, on load and on every regrow. It is a draw-time scale — sprites
+are baked once at `size end` — so it costs nothing per frame.
 
 **Copy json** puts the whole set on the clipboard. Paste it back and it
 can be made the default in `DEFAULTS` at the top of the script; or apply
-it at runtime with `tune({...})`.
+it at runtime with `tune({...})`, which also understands the older
+`br/bg/bb` colour format.
 
-Density and size need a **regrow**; everything else applies live.
+Density needs a **regrow**; everything else applies live.
 
 *Auto-thin* is the density governor. It samples frame time and drops
 plants to hold frame rate — if the field looks like it is losing patches

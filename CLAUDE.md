@@ -73,6 +73,18 @@ first for what the project is and how to run it.
   flowers to 8 out of 415.
 - **Rank is shared by a head and its own stem, and nothing else.** Share
   it across a whole cluster and the governor drops entire clumps at once.
+- **Rustle amount is a gain on the drawn angle**, not only a bigger
+  impulse. Two attempts at driving it through the impulse alone both
+  failed: squared reached 21° at the maximum setting, cubed went
+  3°/7°/11°/52° — dead at the bottom, a cliff at the top. A plant is
+  inside the brush for a handful of frames and the spring pulls back the
+  whole time, so impulse alone cannot reach a wide swing without
+  destroying the low end. The spring stays clamped at 0.5 where it always
+  was; `P.rustle` scales what that bend is worth on screen, capped by
+  `SWING_MAX`. Measured: 1.2°/3.5°/10.3°/29.4°/69.2° across 0.5–4.
+- **Grow-in is a draw-time scale.** Sprites are baked at `size end` and
+  drawn scaled up from `size start`. Re-baking 26 assets every frame for
+  eight seconds would be absurd.
 
 ## Known issues, not yet fixed
 

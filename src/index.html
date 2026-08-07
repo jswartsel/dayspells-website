@@ -72,28 +72,40 @@
   }
   .tune-open:hover{opacity:.9}
   .tune{
-    position:fixed; top:0; right:0; z-index:8; width:272px;
-    max-height:100vh; overflow-y:auto; padding:12px 14px 16px;
-    background:rgba(20,15,9,.9); color:var(--cream);
-    font-size:10px; letter-spacing:.06em; line-height:1.5;
-    backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+    position:fixed; top:8px; right:8px; z-index:8; width:178px;
+    max-height:calc(100vh - 16px); overflow-y:auto;
+    padding:8px 10px 10px; border-radius:3px;
+    background:rgba(20,15,9,.82); color:var(--cream);
+    font-size:9px; letter-spacing:.04em; line-height:1.35;
+    backdrop-filter:blur(7px); -webkit-backdrop-filter:blur(7px);
   }
   .tune[hidden]{display:none}
-  .tune h2{margin:0 0 10px; font-size:10px; letter-spacing:.24em; text-transform:uppercase; opacity:.7}
-  .tune .grp{margin:0 0 10px; padding-top:8px; border-top:1px solid rgba(243,223,185,.14)}
-  .tune .grp:first-of-type{border-top:0; padding-top:0}
-  .tune label{display:block; margin:0 0 7px}
-  .tune .lab{display:flex; justify-content:space-between; opacity:.78}
+  .tune::-webkit-scrollbar{width:5px}
+  .tune::-webkit-scrollbar-thumb{background:rgba(243,223,185,.2)}
+  .tune h2{margin:0 0 6px; font-size:8px; letter-spacing:.2em; text-transform:uppercase; opacity:.5}
+  .tune .grp{margin:7px 0 0; padding-top:5px; border-top:1px solid rgba(243,223,185,.13)}
+  .tune .grp:first-child{border-top:0; padding-top:0; margin-top:0}
+  .tune .grp i{display:block; font-style:normal; opacity:.42; letter-spacing:.16em; margin-bottom:3px}
+  .tune label{display:block; margin:0 0 4px}
+  .tune .lab{display:flex; justify-content:space-between; align-items:center; gap:5px; opacity:.8}
   .tune .lab b{font-weight:400; opacity:.95; font-variant-numeric:tabular-nums}
-  .tune input[type=range]{width:100%; margin:2px 0 0; accent-color:var(--flare); height:14px}
-  .tune .row{display:flex; gap:6px; margin-top:12px; flex-wrap:wrap}
+  .tune input[type=range]{
+    display:block; width:100%; margin:0; accent-color:var(--flare); height:11px;
+  }
+  .tune input[type=color]{
+    width:34px; height:13px; padding:0; border:0; background:none; cursor:pointer;
+  }
+  .tune input[type=color]::-webkit-color-swatch{border:1px solid rgba(243,223,185,.3); border-radius:2px}
+  .tune input[type=color]::-webkit-color-swatch-wrapper{padding:0}
+  .tune input[type=checkbox]{width:auto; height:auto; margin:0; accent-color:var(--flare)}
+  .tune .row{display:flex; gap:4px; margin-top:8px}
   .tune button{
-    flex:1 1 auto; padding:6px 8px; cursor:pointer;
-    font:inherit; letter-spacing:.1em; color:var(--cream);
-    background:rgba(243,223,185,.1); border:1px solid rgba(243,223,185,.22);
+    flex:1 1 0; padding:4px 2px; cursor:pointer; border-radius:2px;
+    font:inherit; font-size:8px; letter-spacing:.06em; color:var(--cream);
+    background:rgba(243,223,185,.1); border:1px solid rgba(243,223,185,.2);
   }
   .tune button:hover{background:rgba(243,223,185,.2)}
-  .tune .note{margin:9px 0 0; opacity:.45; line-height:1.45}
+  .tune .note{margin:6px 0 0; opacity:.4; line-height:1.35}
 
   @media (prefers-reduced-motion: reduce){ .mark .caret{animation:none} }
 </style>
@@ -113,7 +125,7 @@
     <button id="tCopy">copy json</button>
     <button id="tReset">reset</button>
   </div>
-  <p class="note" id="tuneNote">density and size need a regrow. everything else is live.</p>
+  <p class="note" id="tuneNote">density needs a regrow.</p>
 </div>
 
 <script id="payload" type="application/json"></script>
@@ -173,12 +185,26 @@ const SHRINK = 0.30;   // assets draw at 30% of source size, before P.size
 /* Everything the panel drives. window.tune(obj) applies a saved set. */
 const DEFAULTS = {
   rustle:  1.00,   // how hard the cursor knocks a plant
+  speed:   1.00,   // how fast it swings -- scales the spring frequency
   settle:  1.00,   // how long it keeps swaying afterwards
+  radius:  150,    // how far from the cursor the wake reaches, in px
+
+  /* Colour is a tint plus a gain rather than three channel sliders.
+     The tint is normalised to its brightest channel, so it carries hue
+     only and white is neutral; the gain then does brightness. Two
+     controls instead of three, and you pick a colour by looking at it. */
+  bgTint: '#ffffff', bgGain: 1.00,
+  fgTint: '#ffffff', fgGain: 1.00,
+
   ground:  0.42,   // linen tile scale. lower = finer weave, more zoomed out
-  br: 1.00, bg: 1.00, bb: 1.00,   // background channel gains
-  fr: 1.00, fg: 1.00, fb: 1.00,   // plant channel gains
   density: 1.00,
-  size:    1.00,
+
+  /* The field grows in: sprites are baked at sizeTo and drawn scaled
+     from sizeFrom up to it over grow seconds. Set grow to 0 for none. */
+  sizeFrom: 0.40,
+  size:     1.50,
+  grow:     8.0,
+
   /* The governor thins the field to hold frame rate. It is why plants
      can vanish a few seconds after load on a big window. Off = draw
      everything sown, whatever it costs. */
@@ -194,6 +220,16 @@ const STEM_PAIR = 0.85;         // chance a head gets a stem under it
 /* ---------- load ------------------------------------------------- */
 function loadImg(src){
   return new Promise(res=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=()=>res(null); i.src=src; });
+}
+
+/* A hex tint plus a gain, as per-channel multipliers. Normalising the
+   tint to its brightest channel keeps hue and brightness independent,
+   so white is exactly neutral at any gain. */
+function gains(hex, gain){
+  const n = parseInt(String(hex).slice(1), 16);
+  const r = (n>>16)&255, g = (n>>8)&255, b = n&255;
+  const m = Math.max(r, g, b) || 255;
+  return [r/m*gain, g/m*gain, b/m*gain];
 }
 
 /* Per-channel gain. Alpha is left alone, so cutouts keep their edges. */
@@ -249,10 +285,11 @@ let ASSETS = [], linenImg = null, linenPat = null;
    size change re-bakes the sprites without disturbing the field the
    plants are already standing in. */
 function rebakePlants(){
+  const gn = gains(P.fgTint, P.fgGain);
   ASSETS.forEach(a=>{
     const sc = SHRINK * P.size;
     const dw = a.w*sc, dh = a.h*sc;
-    const b  = bakePlant(tint(a.img, P.fr, P.fg, P.fb), dw, dh);
+    const b  = bakePlant(tint(a.img, gn[0], gn[1], gn[2]), dw, dh);
     a.dw = dw; a.dh = dh; a.stem = a.stemSrc*sc;
     a.cv = b.cv; a.pd = b.pd; a.cw = b.w; a.ch = b.h;
     a.dx = -dw/2 - b.pd; a.dy = -dh - a.stem - b.pd;
@@ -264,7 +301,8 @@ function rebakePlants(){
    1:1 the linen reads as burlap rather than as ground seen from above. */
 function rebakeGround(){
   if(!linenImg) return;
-  const t = tint(linenImg, P.br, P.bg, P.bb);
+  const gn = gains(P.bgTint, P.bgGain);
+  const t = tint(linenImg, gn[0], gn[1], gn[2]);
   const s = Math.max(24, Math.round(t.width * P.ground));
   const c = document.createElement('canvas');
   c.width = s; c.height = s;
@@ -437,6 +475,7 @@ function seed(){
     }
   }
   plants.sort((p,q)=>p.y-q.y);
+  growT = 0;                       // a new field grows in from sizeFrom
 }
 window.regrow = ()=>seed();
 
@@ -479,8 +518,21 @@ addEventListener('pointerleave', ()=>{ ptr.live=false; ptr.x=ptr.y=-9999; });
    wanders so the page still shows what it does. */
 setTimeout(()=>{ if(!ptr.touched){ ghost.on=true; ptr.live=true; hint.dataset.done='true'; } }, 3200);
 
-const BRUSH = 150;
 const FORCE = 0.070;
+/* Ceiling on the drawn swing, in radians of bend. 1.5 becomes ~73
+   degrees of lean once the 0.85 stem factor is applied. */
+const SWING_MAX = 1.5;
+
+/* The field grows in on load and on every regrow. Sprites are baked at
+   P.size, so this is a draw-time scale only -- re-baking 26 assets every
+   frame for eight seconds would be absurd. */
+let growT = 1e9;
+function growth(){
+  if(P.grow <= 0 || P.size <= 0) return 1;
+  const u = Math.min(1, growT/P.grow);
+  const e = u*u*(3-2*u);                                   // smoothstep
+  return (P.sizeFrom + (P.size - P.sizeFrom)*e) / P.size;
+}
 
 /* ---------- loop ------------------------------------------------- */
 let last = performance.now(), t = 0;
@@ -531,7 +583,20 @@ function frame(now){
   /* P.settle stretches how long a knocked plant keeps moving: it
      softens the spring damping and slows the shiver decay together. */
   const dampK = 1/Math.max(0.2, P.settle);
-  const buzzK = Math.pow(0.055, dt*dampK);
+  const buzzK = Math.pow(0.055, dt*dampK*P.speed);
+  const spd2  = P.speed*P.speed;
+  const R     = P.radius;
+  /* Amount is a gain on the resulting angle, not just a harder shove.
+     Driving it through the impulse alone does not work: a plant is only
+     inside the brush for a few frames and the spring pulls back the
+     whole time, so the response was either dead at the low end or a
+     cliff at the top (measured: squared reached 21 degrees at maximum,
+     cubed went 3 -> 7 -> 11 -> 52). The spring itself stays exactly as
+     it was, clamped at 0.5, which keeps the motion stable; the setting
+     then scales what that bend is worth on screen, up to SWING_MAX. */
+  const kick = FORCE * P.rustle * P.rustle * 1.5;
+  growT += dt;
+  const gz = growth();
 
   ctx.setTransform(DPR,0,0,DPR,0,0);
   ctx.globalAlpha = 1;
@@ -552,25 +617,32 @@ function frame(now){
       if(brushing){
         const dx = p.x - ptr.x, dy = (p.y - a.dh*p.s*0.55) - ptr.y;
         const d2 = dx*dx + dy*dy;
-        if(d2 < BRUSH*BRUSH){
+        if(d2 < R*R){
           const d = Math.sqrt(d2);
-          const fall = 1 - d/BRUSH;
+          const fall = 1 - d/R;
           const dirx = d > 0.001 ? dx/d : 0;
           const hit  = fall*fall*Math.min(1, speed/13);
-          p.bendV += (ptr.vx*0.012 + dirx*0.9) * hit * FORCE * P.rustle;
+          /* Squared, not linear. A spring this stiff barely moves for a
+             linear multiplier -- the impulse has to grow much faster
+             than the setting to reach the wide swings the clamp allows. */
+          p.bendV += (ptr.vx*0.012 + dirx*0.9) * hit * kick;
           p.buzz = Math.min(1, p.buzz + hit*0.75*P.rustle);   // wool shiver
         }
       }
-      const acc = -p.stiff*(p.bend - rest) - p.damp*dampK*p.bendV;
+      /* Frequency goes as sqrt(stiffness), so speed scales stiffness by
+         its square. Damping scales linearly with it, which holds the
+         damping ratio -- otherwise "faster" would also mean "flatter". */
+      const acc = -p.stiff*spd2*(p.bend - rest) - p.damp*P.speed*dampK*p.bendV;
       p.bendV += acc*dt; p.bend += p.bendV*dt;
       p.buzz *= buzzK;
       if(p.bend >  0.5){ p.bend =  0.5; p.bendV *= -0.3; }
       if(p.bend < -0.5){ p.bend = -0.5; p.bendV *= -0.3; }
     }
 
-    const shiver = p.buzz * 0.035 * Math.sin(t*34 + p.phase*7);
-    const ang = p.lean + (p.bend + shiver) * (a.stem > 0 ? 0.85 : 0.60);
-    const co = Math.cos(ang)*p.s, si = Math.sin(ang)*p.s;
+    const shiver = p.buzz * 0.035 * Math.sin(t*34*P.speed + p.phase*7);
+    const swing  = Math.max(-SWING_MAX, Math.min(SWING_MAX, p.bend * P.rustle));
+    const ang = p.lean + (swing + shiver) * (a.stem > 0 ? 0.85 : 0.60);
+    const co = Math.cos(ang)*p.s*gz, si = Math.sin(ang)*p.s*gz;
 
     ctx.globalAlpha = p.fade * qa;
     ctx.setTransform(DPR*co*p.flip, DPR*si*p.flip, -DPR*si, DPR*co, DPR*p.x, DPR*p.y);
@@ -587,18 +659,24 @@ function frame(now){
 /* ---------- tuning panel ----------------------------------------- */
 /* key, label, min, max, step, what changing it costs */
 const CONTROLS = [
-  ['rustle',  'rustle amount',    0,    3,    0.05, 'live'],
-  ['settle',  'rustle duration',  0.2,  4,    0.05, 'live'],
-  ['ground',  'background zoom',  0.12, 1.5,  0.01, 'ground'],
-  ['br',      'background R',     0,    2,    0.01, 'ground'],
-  ['bg',      'background G',     0,    2,    0.01, 'ground'],
-  ['bb',      'background B',     0,    2,    0.01, 'ground'],
-  ['fr',      'plants R',         0,    2,    0.01, 'plants'],
-  ['fg',      'plants G',         0,    2,    0.01, 'plants'],
-  ['fb',      'plants B',         0,    2,    0.01, 'plants'],
-  ['density', 'density',          0.2,  2.5,  0.05, 'regrow'],
-  ['size',    'size',             0.4,  2,    0.02, 'plants'],
-  ['autothin','auto-thin to hold fps', 0, 1,  1,    'live']
+  {grp:'rustle'},
+  {k:'rustle',  l:'amount',   min:0,    max:4,   step:0.05},
+  {k:'speed',   l:'speed',    min:0.2,  max:3,   step:0.05},
+  {k:'settle',  l:'duration', min:0.2,  max:4,   step:0.05},
+  {k:'radius',  l:'radius',   min:40,   max:600, step:5,   dp:0},
+  {grp:'colour'},
+  {k:'bgTint',  l:'ground',   type:'color', cost:'ground'},
+  {k:'bgGain',  l:'ground gain', min:0.2, max:2, step:0.01, cost:'ground'},
+  {k:'fgTint',  l:'plants',   type:'color', cost:'plants'},
+  {k:'fgGain',  l:'plants gain', min:0.2, max:2, step:0.01, cost:'plants'},
+  {grp:'field'},
+  {k:'ground',  l:'ground zoom', min:0.12, max:1.5, step:0.01, cost:'ground'},
+  {k:'density', l:'density',  min:0.2,  max:2.5, step:0.05, cost:'regrow'},
+  {grp:'grow in'},
+  {k:'sizeFrom',l:'size start',min:0.2, max:2,   step:0.02},
+  {k:'size',    l:'size end',  min:0.4, max:2.5, step:0.02, cost:'plants'},
+  {k:'grow',    l:'seconds',   min:0,   max:30,  step:0.5,  dp:1},
+  {k:'autothin',l:'auto-thin fps', type:'check'}
 ];
 const panel = document.getElementById('tune');
 const inputs = {};
@@ -619,42 +697,51 @@ function schedule(kind){
 }
 
 function syncPanel(){
-  CONTROLS.forEach(([k])=>{
-    const i = inputs[k];
+  CONTROLS.forEach(c=>{
+    const i = inputs[c.k];
     if(!i) return;
-    if(i.toggle){ i.el.checked = !!P[k]; }
-    else { i.el.value = P[k]; i.out.textContent = (+P[k]).toFixed(2); }
+    if(c.type === 'check')      i.el.checked = !!P[c.k];
+    else if(c.type === 'color') i.el.value = P[c.k];
+    else { i.el.value = P[c.k]; i.out.textContent = (+P[c.k]).toFixed(c.dp ?? 2); }
   });
 }
 
 function buildPanel(){
   const body = document.getElementById('tuneBody');
-  let group = null;
-  CONTROLS.forEach(([k, label, min, max, step, cost], i)=>{
-    if(i===0 || i===2 || i===6 || i===9){
+  let group = body;
+  CONTROLS.forEach(c=>{
+    if(c.grp){
       group = document.createElement('div');
       group.className = 'grp';
+      group.innerHTML = '<i>' + c.grp + '</i>';
       body.appendChild(group);
+      return;
     }
-    const toggle = (min===0 && max===1 && step===1);
+    const {k, l, min, max, step, type, cost, dp} = c;
     const lab = document.createElement('label');
-    lab.innerHTML = '<span class="lab">' + label + '<b></b></span>';
+    lab.innerHTML = '<span class="lab">' + l + '<b></b></span>';
     const el = document.createElement('input');
-    if(toggle){
+    const out = lab.querySelector('b');
+
+    if(type === 'check'){
       el.type = 'checkbox'; el.checked = !!P[k];
-      el.style.cssText = 'width:auto;margin:0;vertical-align:middle';
       lab.querySelector('.lab').prepend(el);
+    } else if(type === 'color'){
+      el.type = 'color'; el.value = P[k];
+      lab.querySelector('.lab').appendChild(el);
+      out.remove();
     } else {
       el.type='range'; el.min=min; el.max=max; el.step=step; el.value=P[k];
+      out.textContent = (+P[k]).toFixed(dp ?? 2);
       lab.appendChild(el);
     }
     group.appendChild(lab);
-    const out = lab.querySelector('b');
-    out.textContent = toggle ? '' : (+P[k]).toFixed(2);
-    inputs[k] = {el, out, toggle};
+    inputs[k] = {el, out};
     el.addEventListener('input', ()=>{
-      P[k] = toggle ? (el.checked ? 1 : 0) : +el.value;
-      if(!toggle) out.textContent = P[k].toFixed(2);
+      P[k] = type === 'check' ? (el.checked ? 1 : 0)
+           : type === 'color' ? el.value
+           : +el.value;
+      if(type !== 'check' && type !== 'color') out.textContent = P[k].toFixed(dp ?? 2);
       if(cost === 'ground' || cost === 'plants') schedule(cost);
     });
   });
@@ -691,7 +778,7 @@ function buildPanel(){
       catch(e2){ note.textContent = 'copy failed -- see console'; console.log(txt); }
       ta.remove();
     }
-    setTimeout(()=>{ note.textContent = 'density and size need a regrow. everything else is live.'; }, 4000);
+    setTimeout(()=>{ note.textContent = 'density needs a regrow.'; }, 4000);
   };
 
   const show = v=>{ panel.hidden = !v; };
@@ -707,7 +794,20 @@ function buildPanel(){
 /* Apply a saved set: window.tune({...}) */
 window.tune = obj=>{
   if(!obj || typeof obj !== 'object') return {...P};
-  Object.keys(DEFAULTS).forEach(k=>{ if(typeof obj[k] === 'number') P[k] = obj[k]; });
+  /* Colour used to be three channel gains per target. Fold an older
+     saved set into the tint + gain the panel uses now, rather than
+     dropping it on the floor. */
+  const fold = (r,g,b)=>{
+    const m = Math.max(r,g,b) || 1;
+    const h = v=>Math.round(Math.min(255, v/m*255)).toString(16).padStart(2,'0');
+    return ['#' + h(r) + h(g) + h(b), +m.toFixed(2)];
+  };
+  if(typeof obj.br === 'number') [obj.bgTint, obj.bgGain] = fold(obj.br, obj.bg, obj.bb);
+  if(typeof obj.fr === 'number') [obj.fgTint, obj.fgGain] = fold(obj.fr, obj.fg, obj.fb);
+
+  Object.keys(DEFAULTS).forEach(k=>{
+    if(typeof obj[k] === typeof DEFAULTS[k]) P[k] = obj[k];
+  });
   syncPanel(); rebakePlants(); rebakeGround(); seed();
   return {...P};
 };
