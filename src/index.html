@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>dayspells</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  /* Palette measured off the rectified, relit panels. */
+  :root{
+    --linen:      #8c762d;
+    --iris:       #3f1b32;
+    --iris-deep:  #2e0921;
+    --flare:      #f4451f;   /* wordmark */
+    --lilac:      #8a6f83;
+    --gold:       #d8a32b;
+    --ember:      #8b5708;
+    --blush:      #c9a388;
+    --cream:      #f3dfb9;
+    --frond:      #322a1e;
+    --frond-dark: #1a130b;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; overflow:hidden;
+    background:var(--linen);
+    font-family:"Space Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    color:var(--iris);
+    -webkit-font-smoothing:antialiased;
+  }
+  #field{position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none}
+
+  .stage{position:fixed; inset:0; display:grid; place-items:center; pointer-events:none; z-index:2}
+  .mark{position:relative; padding:clamp(1rem,4vw,2.2rem) clamp(1.4rem,6vw,3.6rem); text-align:center}
+  .mark::before{
+    content:""; position:absolute; inset:-22%;
+    background:radial-gradient(ellipse at center,
+      rgba(243,223,185,.22) 0%, rgba(243,223,185,.11) 48%,
+      rgba(243,223,185,.02) 72%, rgba(243,223,185,0) 86%);
+    z-index:-1;
+  }
+  .mark h1{
+    margin:0; font-weight:700; line-height:1; text-transform:lowercase;
+    font-size:clamp(1.5rem,7.2vw,4.2rem);
+    letter-spacing:clamp(.12em,.9vw,.24em);
+    text-indent:clamp(.12em,.9vw,.24em);
+    color:var(--flare);
+  }
+  .mark .caret{color:var(--iris-deep); opacity:.5; animation:blink 1.35s steps(1,end) infinite}
+  @keyframes blink{0%,55%{opacity:.5}56%,100%{opacity:0}}
+
+  .hint{
+    position:fixed; left:50%; transform:translateX(-50%);
+    bottom:clamp(1.3rem,4vh,2.4rem); z-index:3; margin:0;
+    font-size:.64rem; letter-spacing:.22em; color:var(--frond-dark);
+    opacity:.55; transition:opacity .9s ease; pointer-events:none;
+  }
+  .hint[data-done="true"]{opacity:0}
+
+  .loading{
+    position:fixed; inset:0; z-index:5; display:grid; place-items:center;
+    background:var(--linen); font-size:.68rem; letter-spacing:.24em;
+    color:var(--frond-dark); transition:opacity .6s ease;
+  }
+  .loading[data-done="true"]{opacity:0; pointer-events:none}
+
+  @media (prefers-reduced-motion: reduce){ .mark .caret{animation:none} }
+</style>
+</head>
+<body>
+<canvas id="field" aria-hidden="true"></canvas>
+<div class="stage"><div class="mark"><h1>dayspells<span class="caret">_</span></h1></div></div>
+<p class="hint" id="hint">move through the field</p>
+<div class="loading" id="loading">threading</div>
+
+<script id="payload" type="application/json"></script>
+<script>
+/* ==================================================================
+   dayspells
+
+   The meadow is built from photographs of two crewelwork panels.
+   How the assets were made:
+     1. EXIF-corrected, then perspective-warped off the frame corners
+        so each panel is a flat 1300x3050 rectangle.
+     2. Luminance flattened against a heavy blur of itself: kills the
+        lighting falloff, keeps the wool colour.
+     3. Linen reference sampled from the panel margins; foreground =
+        normalised Lab distance from it, measured on a bilateral-
+        filtered copy so the weave doesn't register as signal.
+     4. Per flower: erode hard enough to sever the stems, keep the
+        blob nearest the seed point, reconstruct it back under the
+        mask. Cut depth swept 15-103px, scored on how much of the
+        silhouette touched the crop border.
+     5. Brightness and saturation graded in at bake time, so the
+        browser does no per-frame colour work.
+   The ground is a 512px square of the cleanest bare linen in either
+   panel, made to tile by rolling and cross-fading the seam.
+
+   Nothing here is drawn by hand. Every pixel is wool.
+
+   window.regrow()  -- resow the field without reloading
+================================================================== */
+
+/* Served from a dev server, the payload is fetched. In dist/ it has been
+   inlined into the <script id="payload"> tag above. Both work. */
+let DATA = null;
+async function loadData(){
+  const el = document.getElementById('payload');
+  const inline = el.textContent.trim();
+  if(inline) return JSON.parse(inline);
+  const res = await fetch('../assets/payload.json');
+  if(!res.ok) throw new Error('assets/payload.json missing -- run: python pipeline/build.py');
+  return res.json();
+}
+
+const canvas  = document.getElementById('field');
+const ctx     = canvas.getContext('2d', {alpha:false, desynchronized:true});
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const hint    = document.getElementById('hint');
+const loading = document.getElementById('loading');
+
+const rnd = (a,b)=>a+Math.random()*(b-a);
+
+const SHRINK = 0.30;   // assets draw at 30% of source size
+
+/* ---------- load ------------------------------------------------ */
+function loadImg(src){
+  return new Promise(res=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=()=>res(null); i.src=src; });
+}
+
+/* Bake each asset once, at the size it will actually be drawn, with
+   its contact shadow composited in. One drawImage per plant per
+   frame, and no resampling a 168px source down to 40px 2000 times. */
+function bakePlant(img, dw, dh){
+  const q  = Math.min(2.2, (devicePixelRatio||1)*1.2);
+  const mw = Math.max(2, Math.round(dw*q)), mh = Math.max(2, Math.round(dh*q));
+  const P  = Math.max(3, Math.round(4*q));
+
+  const sil = document.createElement('canvas');
+  sil.width = mw + P*2; sil.height = mh + P*2;
+  const sg = sil.getContext('2d');
+  sg.imageSmoothingQuality = 'high';
+  sg.drawImage(img, P, P, mw, mh);
+  sg.globalCompositeOperation = 'source-in';
+  sg.fillStyle = 'rgba(26,19,11,.34)';
+  sg.fillRect(0, 0, sil.width, sil.height);
+
+  const out = document.createElement('canvas');
+  out.width = sil.width; out.height = sil.height;
+  const g = out.getContext('2d');
+  g.imageSmoothingQuality = 'high';
+  try { g.filter = 'blur(' + (3*q).toFixed(1) + 'px)'; } catch(e){}
+  g.drawImage(sil, 1.6*q, 2.2*q);
+  try { g.filter = 'none'; } catch(e){}
+  g.drawImage(img, P, P, mw, mh);
+
+  const pd = P*dw/mw;                        // pad, in display px
+  return {cv:out, pd, w: dw + pd*2, h: dh + pd*2};
+}
+
+let ASSETS = [], linenPat = null;
+
+async function boot(){
+  try { DATA = await loadData(); }
+  catch(e){ loading.textContent = e.message; console.error(e); return; }
+  const linen = await loadImg(DATA.linen);
+  const imgs  = await Promise.all(DATA.assets.map(a=>loadImg(a.d)));
+  DATA.assets.forEach((a,i)=>{
+    if(!imgs[i]) return;
+    const dw = a.w*SHRINK, dh = a.h*SHRINK;
+    const b  = bakePlant(imgs[i], dw, dh);
+    const stem = a.stem*SHRINK;
+    ASSETS.push({...a, dw, dh, stem, cv:b.cv, pd:b.pd, cw:b.w, ch:b.h,
+                 dx: -dw/2 - b.pd, dy: -dh - stem - b.pd});
+  });
+  if(linen) linenPat = ctx.createPattern(linen,'repeat');
+  loading.dataset.done = 'true';
+  resize();
+  requestAnimationFrame(frame);
+}
+
+/* ---------- field ----------------------------------------------- */
+let W=0, H=0, DPR=1, plants=[], vig=null;
+
+const WEIGHT = {grass:6.2, small:2.0, clump:1.0, flower:2.3};
+
+/* Uniform random scatter reads as wallpaper. A meadow grows in
+   colonies, so each asset picks a few patches it prefers, and a
+   coarse spatial grid stops neighbours stacking. New every load. */
+function seed(){
+  plants = [];
+  if(!ASSETS.length) return;
+
+  const byRole = {};
+  ASSETS.forEach(a=>(byRole[a.role] = byRole[a.role] || []).push(a));
+  const pool = [];
+  Object.keys(byRole).forEach(role=>{
+    const set  = byRole[role];
+    const reps = Math.max(1, Math.round((WEIGHT[role]||1)*30/set.length));
+    set.forEach(a=>{ for(let i=0;i<reps;i++) pool.push(a); });
+  });
+
+  const span = Math.min(W,H);
+  const colony = new Map();
+  ASSETS.forEach(a=>{
+    const k = 2 + (Math.random()*4|0), cs = [];
+    for(let i=0;i<k;i++) cs.push({
+      x: rnd(-0.12,1.12)*W, y: rnd(-0.18,1.18)*H, r: rnd(0.10,0.30)*span
+    });
+    colony.set(a, cs);
+  });
+
+  const n  = Math.min(2600, Math.max(320, Math.round(W*H/700)));
+  const rx = Math.min(W*0.20, 205), ry = Math.min(H*0.085, 62);
+
+  const CELL = 16, grid = new Map();
+  function crowded(x,y,r){
+    const c0=((x-r)/CELL)|0, c1=((x+r)/CELL)|0, r0=((y-r)/CELL)|0, r1=((y+r)/CELL)|0;
+    for(let cx=c0;cx<=c1;cx++) for(let cy=r0;cy<=r1;cy++){
+      const b = grid.get(cx+','+cy);
+      if(!b) continue;
+      for(let i=0;i<b.length;i++){
+        const dx=b[i].x-x, dy=b[i].y-y;
+        if(dx*dx+dy*dy < r*r) return true;
+      }
+    }
+    return false;
+  }
+
+  for(let guard=0; plants.length<n && guard<n*6; guard++){
+    const a = pool[(Math.random()*pool.length)|0];
+    let x, y;
+    if(Math.random() < 0.60){                       // grow near its own kind
+      const cs = colony.get(a), c = cs[(Math.random()*cs.length)|0];
+      const th = Math.random()*Math.PI*2;
+      const d  = Math.abs(rnd(-1,1)+rnd(-1,1))*0.5*c.r;
+      x = c.x + Math.cos(th)*d; y = c.y + Math.sin(th)*d;
+    } else {                                        // volunteers
+      x = rnd(-W*0.10, W*1.10); y = rnd(-H*0.14, H*1.14);
+    }
+    if(y < -H*0.16 || y > H*1.16 || x < -W*0.14 || x > W*1.14) continue;
+
+    const q = Math.hypot((x-W/2)/rx, (y-H*0.5)/ry);
+    if(q < 1 && Math.random() > Math.pow(q,1.15)) continue;   // clearing for the name
+
+    const depth = Math.min(1, Math.max(0, (y + H*0.14)/(H*1.28)));
+    const sc = (0.70 + depth*0.34) * rnd(0.80,1.24);
+    if(crowded(x, y, Math.max(5, a.dw*sc*0.34))) continue;
+
+    const p = {
+      a, x, y, s: sc,
+      flip: Math.random() < 0.5 ? -1 : 1,
+      lean: rnd(-0.13, 0.13),
+      fade: 0.80 + depth*0.20,
+      rank: Math.random(),
+      phase: Math.random()*Math.PI*2,
+      stiff: rnd(46,84), damp: rnd(5.0,7.4),
+      bend:0, bendV:0, buzz:0
+    };
+    plants.push(p);
+    const k = (((x/CELL)|0) + ',' + ((y/CELL)|0));
+    if(!grid.has(k)) grid.set(k, []);
+    grid.get(k).push(p);
+  }
+  plants.sort((p,q)=>p.y-q.y);
+}
+window.regrow = ()=>seed();
+
+function resize(){
+  DPR = Math.min(1.5, devicePixelRatio||1);
+  W = innerWidth; H = innerHeight;
+  canvas.width = Math.round(W*DPR); canvas.height = Math.round(H*DPR);
+  canvas.style.width = W+'px'; canvas.style.height = H+'px';
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  vig = ctx.createRadialGradient(W/2,H/2,Math.min(W,H)*0.34,W/2,H/2,Math.max(W,H)*0.82);
+  vig.addColorStop(0,'rgba(26,19,11,0)');
+  vig.addColorStop(1,'rgba(26,19,11,.24)');
+  seed();
+}
+addEventListener('resize', resize);
+
+/* Three drifting waves, so gusts travel across the field rather than
+   every stem wobbling on the same beat. */
+function windAt(x,y,t){
+  return Math.sin(x*0.0040 + t*0.52)*0.44
+       + Math.sin(y*0.0029 - t*0.36 + 1.7)*0.28
+       + Math.sin((x+y*0.6)*0.0015 + t*0.19)*0.40;
+}
+
+/* ---------- the brush ------------------------------------------- */
+const ptr = {x:-9999,y:-9999,px:-9999,py:-9999,vx:0,vy:0,live:false,touched:false};
+const ghost = {t:Math.random()*100, on:false};
+
+function move(e){
+  const x = e.clientX, y = e.clientY;
+  if(!ptr.live){ ptr.px=x; ptr.py=y; ptr.live=true; }
+  ptr.x=x; ptr.y=y; ptr.touched=true; ghost.on=false;
+  if(hint.dataset.done!=='true') hint.dataset.done='true';
+}
+addEventListener('pointermove', move, {passive:true});
+addEventListener('pointerdown', move, {passive:true});
+addEventListener('pointerleave', ()=>{ ptr.live=false; ptr.x=ptr.y=-9999; });
+
+/* No pointer at all (touch device, or nobody home): a phantom gust
+   wanders so the page still shows what it does. */
+setTimeout(()=>{ if(!ptr.touched){ ghost.on=true; ptr.live=true; hint.dataset.done='true'; } }, 3200);
+
+const BRUSH = 150;
+const FORCE = 0.070;
+
+/* ---------- loop ------------------------------------------------ */
+let last = performance.now(), t = 0;
+
+/* Sow for the densest meadow, then let the machine tell us how much
+   of it it can actually hold. Fast hardware draws the lot; slower
+   hardware thins out uniformly instead of stuttering. */
+let quality = 1, acc = 0, ticks = 0;
+let warm = 0;
+function govern(dt){
+  warm += dt;
+  if(warm < 1.5) return;                      // ignore load-time hitches
+  acc += dt; ticks++;
+  if(acc < 0.6) return;
+  const ms = (acc/ticks)*1000;
+  if(ms > 24 || ms < 15){                     // only act outside 42-66fps
+    const f = Math.max(0.72, Math.min(1.05, 19/ms));
+    quality = Math.max(0.34, Math.min(1, quality*f));
+  }
+  acc = 0; ticks = 0;
+}
+window.density = ()=>({quality:+quality.toFixed(2), sown:plants.length,
+                       drawn:plants.filter(p=>p.rank<quality).length});
+
+function frame(now){
+  let dt = (now-last)/1000; last = now;
+  dt = Math.min(dt, 1/30); t += dt;
+  if(!reduced) govern(dt);
+
+  if(ghost.on){
+    ghost.t += dt;
+    ptr.x = W*(0.5 + 0.40*Math.sin(ghost.t*0.42)*Math.cos(ghost.t*0.17));
+    ptr.y = H*(0.5 + 0.36*Math.sin(ghost.t*0.31 + 1.1));
+  }
+  ptr.vx = ptr.vx*0.78 + (ptr.x-ptr.px)*0.22;
+  ptr.vy = ptr.vy*0.78 + (ptr.y-ptr.py)*0.22;
+  ptr.px = ptr.x; ptr.py = ptr.y;
+  const speed = Math.hypot(ptr.vx, ptr.vy);
+  const brushing = ptr.live && speed > 0.05;
+
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  ctx.globalAlpha = 1;
+  if(linenPat){ ctx.fillStyle = linenPat; ctx.fillRect(0,0,W,H); }
+
+  for(let i=0;i<plants.length;i++){
+    const p = plants[i];
+    if(p.rank > quality) continue;
+    const a = p.a;
+    const rad = (a.dh + a.stem)*p.s + 24;
+    if(p.x < -rad || p.x > W+rad || p.y < -rad || p.y > H+rad) continue;
+
+    if(!reduced){
+      const rest = windAt(p.x, p.y, t + p.phase) * 0.055;
+      if(brushing){
+        const dx = p.x - ptr.x, dy = (p.y - a.dh*p.s*0.55) - ptr.y;
+        const d2 = dx*dx + dy*dy;
+        if(d2 < BRUSH*BRUSH){
+          const d = Math.sqrt(d2);
+          const fall = 1 - d/BRUSH;
+          const dirx = d > 0.001 ? dx/d : 0;
+          const hit  = fall*fall*Math.min(1, speed/13);
+          p.bendV += (ptr.vx*0.012 + dirx*0.9) * hit * FORCE;
+          p.buzz = Math.min(1, p.buzz + hit*0.75);   // wool shiver
+        }
+      }
+      const acc = -p.stiff*(p.bend - rest) - p.damp*p.bendV;
+      p.bendV += acc*dt; p.bend += p.bendV*dt;
+      p.buzz *= Math.pow(0.055, dt);
+      if(p.bend >  0.5){ p.bend =  0.5; p.bendV *= -0.3; }
+      if(p.bend < -0.5){ p.bend = -0.5; p.bendV *= -0.3; }
+    }
+
+    const shiver = p.buzz * 0.035 * Math.sin(t*34 + p.phase*7);
+    const ang = p.lean + (p.bend + shiver) * (a.stem > 0 ? 0.85 : 0.60);
+    const co = Math.cos(ang)*p.s, si = Math.sin(ang)*p.s;
+
+    ctx.globalAlpha = p.fade;
+    ctx.setTransform(DPR*co*p.flip, DPR*si*p.flip, -DPR*si, DPR*co, DPR*p.x, DPR*p.y);
+    ctx.drawImage(a.cv, a.dx, a.dy, a.cw, a.ch);
+  }
+
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = vig; ctx.fillRect(0,0,W,H);
+
+  requestAnimationFrame(frame);
+}
+
+boot();
+</script>
+</body>
+</html>

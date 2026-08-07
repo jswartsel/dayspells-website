@@ -1,0 +1,11 @@
+# pipeline intermediates + screenshots, all regenerable
+work/
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# macOS
+.DS_Store
