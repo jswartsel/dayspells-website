@@ -138,6 +138,7 @@ URL. It opens by itself on localhost.
 |---|---|
 | **rustle** | amount, speed, duration, radius |
 | **colour** | a tint swatch and a gain, for ground and for plants |
+| **wordmark** | size and colour of the name |
 | **mix** | relative amount of purple, white, yellow, pink, grass |
 | **field** | ground zoom, density |
 | **grow in** | size start, size end, seconds |
@@ -167,6 +168,10 @@ therefore starts out well ahead of white. Measured counts out of ~3200:
 | 0.80 / 1.20 | 382 | 131 |
 | 0.50 / 1.60 | 284 | 215 |
 | 0.35 / 2.00 | 198 | 273 |
+
+**Wordmark size** also widens the clearing that gets sown around the
+name, so a bigger wordmark doesn't end up sitting in undergrowth. That
+part lives in `seed()`, so it takes a **regrow** to show.
 
 **Grow in** ramps the field up from `size start` to `size end` over
 `seconds`, on load and on every regrow. It is a draw-time scale — sprites

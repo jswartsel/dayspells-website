@@ -13,7 +13,9 @@
     --linen:      #d8c98a;
     --iris:       #3f1b32;
     --iris-deep:  #2e0921;
-    --flare:      #f4451f;   /* wordmark */
+    --flare:      #f4451f;   /* wordmark, and the panel accent */
+    --mark-color: #f4451f;   /* wordmark only -- driven by the panel */
+    --mark-scale: 1;
     --frond-dark: #1a130b;
     --cream:      #f3dfb9;
   }
@@ -39,10 +41,10 @@
   }
   .mark h1{
     margin:0; font-weight:700; line-height:1; text-transform:lowercase;
-    font-size:clamp(1.5rem,7.2vw,4.2rem);
+    font-size:calc(clamp(1.5rem,7.2vw,4.2rem) * var(--mark-scale));
     letter-spacing:clamp(.12em,.9vw,.24em);
     text-indent:clamp(.12em,.9vw,.24em);
-    color:var(--flare);
+    color:var(--mark-color);
   }
   .mark .caret{color:var(--iris-deep); opacity:.5; animation:blink 1.35s steps(1,end) infinite}
   @keyframes blink{0%,55%{opacity:.5}56%,100%{opacity:0}}
@@ -198,13 +200,19 @@ const DEFAULTS = {
   fgTint: '#ffffff', fgGain: 1.44,
 
   ground:  0.50,   // linen tile scale. lower = finer weave, more zoomed out
-  density: 2.50,
+  density: 2.00,
 
   /* The field grows in: sprites are baked at size and drawn scaled from
      sizeFrom up to it over grow seconds. Set grow to 0 for none. */
   sizeFrom: 0.40,
   size:     1.80,
   grow:     5.0,
+
+  /* The wordmark. markSize also widens the clearing sown around it, so
+     the name does not end up sitting in undergrowth -- that part is in
+     seed(), so it needs a regrow. */
+  markSize:  1.00,
+  markColor: '#f4451f',
 
   /* Relative amount of each colour of bloom, and of loose grass. 1.0 is
      "whatever the role weight already said". These multiply the pool, so
@@ -232,6 +240,12 @@ const MIX = [
   [/^iris-pink/,             'mixPink'],
   [/^blade/,                 'mixGrass']
 ];
+function applyMark(){
+  const r = document.documentElement.style;
+  r.setProperty('--mark-scale', P.markSize);
+  r.setProperty('--mark-color', P.markColor);
+}
+
 function mixOf(a){
   if(a.role === 'stem') return 1;   // stems are named blade-* too, but they
   for(const [re, k] of MIX)         // are paired to heads, not scattered
@@ -351,6 +365,7 @@ async function boot(){
   });
   rebakePlants();
   rebakeGround();
+  applyMark();
   buildPanel();
   loading.dataset.done = 'true';
   resize();
@@ -419,8 +434,15 @@ function seed(){
     colony.set(a, cs);
   });
 
-  const target = Math.min(3200, Math.max(260, Math.round(W*H/700*P.density)));
-  const rx = Math.min(W*0.20, 205), ry = Math.min(H*0.085, 62);
+  /* Hard ceiling on plants, whatever the density says. It was 3200,
+     which the slider hit at density ~1.7 on a 1440x900 window -- so
+     anything above that was inert. Raised so the top of the slider
+     actually means something; the governor is what protects frame rate,
+     not this. */
+  const target = Math.min(8000, Math.max(260, Math.round(W*H/700*P.density)));
+  /* The clearing sown around the name tracks its size, or a bigger
+     wordmark ends up sitting in undergrowth. */
+  const rx = Math.min(W*0.20, 205)*P.markSize, ry = Math.min(H*0.085, 62)*P.markSize;
 
   const CELL = 16, grid = new Map();
   function crowded(x,y,r){
@@ -705,6 +727,9 @@ const CONTROLS = [
   {k:'bgGain',  l:'ground gain', min:0.2, max:2, step:0.01, cost:'ground'},
   {k:'fgTint',  l:'plants',   type:'color', cost:'plants'},
   {k:'fgGain',  l:'plants gain', min:0.2, max:2, step:0.01, cost:'plants'},
+  {grp:'wordmark'},
+  {k:'markSize',  l:'size',  min:0.3, max:3, step:0.02, cost:'mark'},
+  {k:'markColor', l:'colour', type:'color', cost:'mark'},
   {grp:'mix'},
   {k:'mixPurple', l:'purple', min:0, max:2, step:0.05, cost:'regrow'},
   {k:'mixWhite',  l:'white',  min:0, max:2, step:0.05, cost:'regrow'},
@@ -713,7 +738,7 @@ const CONTROLS = [
   {k:'mixGrass',  l:'grass',  min:0, max:2, step:0.05, cost:'regrow'},
   {grp:'field'},
   {k:'ground',  l:'ground zoom', min:0.12, max:1.5, step:0.01, cost:'ground'},
-  {k:'density', l:'density',  min:0.2,  max:2.5, step:0.05, cost:'regrow'},
+  {k:'density', l:'density',  min:0.2,  max:4,   step:0.05, cost:'regrow'},
   {grp:'grow in'},
   {k:'sizeFrom',l:'size start',min:0.2, max:2,   step:0.02},
   {k:'size',    l:'size end',  min:0.4, max:2.5, step:0.02, cost:'plants'},
@@ -784,6 +809,7 @@ function buildPanel(){
            : type === 'color' ? el.value
            : +el.value;
       if(type !== 'check' && type !== 'color') out.textContent = P[k].toFixed(dp ?? 2);
+      if(cost === 'mark') applyMark();
       if(cost === 'ground' || cost === 'plants') schedule(cost);
     });
   });
@@ -807,7 +833,7 @@ function buildPanel(){
 
   document.getElementById('tRegrow').onclick = ()=>seed();
   document.getElementById('tReset').onclick  = ()=>{
-    Object.assign(P, DEFAULTS); syncPanel(); rebakePlants(); rebakeGround(); seed();
+    Object.assign(P, DEFAULTS); syncPanel(); applyMark(); rebakePlants(); rebakeGround(); seed();
   };
   document.getElementById('tCopy').onclick = async ()=>{
     const txt = JSON.stringify(P, null, 2);
@@ -850,7 +876,7 @@ window.tune = obj=>{
   Object.keys(DEFAULTS).forEach(k=>{
     if(typeof obj[k] === typeof DEFAULTS[k]) P[k] = obj[k];
   });
-  syncPanel(); rebakePlants(); rebakeGround(); seed();
+  syncPanel(); applyMark(); rebakePlants(); rebakeGround(); seed();
   return {...P};
 };
 

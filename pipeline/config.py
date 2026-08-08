@@ -121,10 +121,12 @@ KEEP = [
     ('blade-f',       'stem',   190,  0),
     # --- single blades, for tufts. Scattered at a density independent of
     # both the stems and the flowers -- see WEIGHT in src/index.html.
-    ('blade-e',       'grass',  150,  0),
-    ('blade-g',       'grass',  165,  0),
-    ('blade-i',       'grass',  158,  0),
-    ('blade-j',       'grass',  148,  0),
+    # Sized 20% under the stems so a loose blade reads as undergrowth
+    # rather than as another plant.
+    ('blade-e',       'grass',  120,  0),
+    ('blade-g',       'grass',  132,  0),
+    ('blade-i',       'grass',  126,  0),
+    ('blade-j',       'grass',  118,  0),
 ]
 
 # Colour grade, baked into the assets so the browser does no per-frame work.
