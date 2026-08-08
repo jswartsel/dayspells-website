@@ -75,9 +75,10 @@
   }
   .tools button{
     border:0; background:none; padding:0; cursor:pointer;
-    font-family:inherit; font-weight:700; font-size:11px;
+    font-family:inherit; font-weight:700; font-size:13px;
     text-transform:lowercase; letter-spacing:.14em;
-    color:var(--mark-color); opacity:.62; transition:opacity .18s;
+    color:var(--mark-color); opacity:.82; transition:opacity .18s;
+    text-shadow:0 1px 2px rgba(26,19,11,.45);
   }
   .tools button:hover{opacity:1}
   .tools button[aria-expanded="true"]{opacity:1; text-decoration:underline}
@@ -87,8 +88,8 @@
   }
   .tune-close:hover{opacity:1}
   .tune{
-    position:fixed; top:34px; right:8px; z-index:8; width:178px;
-    max-height:calc(100vh - 42px); overflow-y:auto;
+    position:fixed; top:38px; right:8px; z-index:8; width:178px;
+    max-height:calc(100vh - 46px); overflow-y:auto;
     padding:8px 10px 10px; border-radius:3px;
     background:rgba(20,15,9,.82); color:var(--cream);
     font-size:9px; letter-spacing:.04em; line-height:1.35;
@@ -146,7 +147,7 @@
     <button id="tCopy">copy json</button>
     <button id="tReset">reset</button>
   </div>
-  <p class="note" id="tuneNote">density needs a regrow.</p>
+  <p class="note" id="tuneNote">auto-regrows 4s after a change.</p>
 </div>
 
 <script id="payload" type="application/json"></script>
@@ -791,21 +792,21 @@ const CONTROLS = [
   {k:'fgGain',  l:'gain',  min:0.2, max:2, step:0.01, cost:'plants'},
   {k:'fgTint',  l:'tint',  type:'color', cost:'plants'},
   {grp:'words'},
-  {k:'markSize',  l:'size',  min:0.3, max:3, step:0.02, cost:'mark'},
+  {k:'markSize',  l:'size',  min:0.3, max:3, step:0.02, cost:'mark', rg:1},
   {k:'markColor', l:'colour', type:'color', cost:'mark'},
   {grp:'mix'},
-  {k:'mixPurple', l:'purple', min:0, max:2, step:0.05, cost:'regrow'},
-  {k:'mixWhite',  l:'white',  min:0, max:2, step:0.05, cost:'regrow'},
-  {k:'mixYellow', l:'yellow', min:0, max:2, step:0.05, cost:'regrow'},
-  {k:'mixPink',   l:'pink',   min:0, max:2, step:0.05, cost:'regrow'},
-  {k:'mixGrass',  l:'grass',  min:0, max:2, step:0.05, cost:'regrow'},
+  {k:'mixPurple', l:'purple', min:0, max:2, step:0.05, cost:'regrow', rg:1},
+  {k:'mixWhite',  l:'white',  min:0, max:2, step:0.05, cost:'regrow', rg:1},
+  {k:'mixYellow', l:'yellow', min:0, max:2, step:0.05, cost:'regrow', rg:1},
+  {k:'mixPink',   l:'pink',   min:0, max:2, step:0.05, cost:'regrow', rg:1},
+  {k:'mixGrass',  l:'grass',  min:0, max:2, step:0.05, cost:'regrow', rg:1},
   {grp:'field'},
   {k:'ground',  l:'ground zoom', min:0.12, max:1.5, step:0.01, cost:'ground'},
-  {k:'density', l:'density',  min:0.2,  max:4,   step:0.05, cost:'regrow'},
+  {k:'density', l:'density',  min:0.2,  max:4,   step:0.05, cost:'regrow', rg:1},
   {grp:'grow in'},
-  {k:'sizeFrom',l:'size start',min:0.2, max:2,   step:0.02},
+  {k:'sizeFrom',l:'size start',min:0.2, max:2,   step:0.02, rg:1},
   {k:'size',    l:'size end',  min:0.4, max:2.5, step:0.02, cost:'plants'},
-  {k:'grow',    l:'seconds',   min:0,   max:30,  step:0.5,  dp:1},
+  {k:'grow',    l:'seconds',   min:0,   max:30,  step:0.5,  dp:1, rg:1},
   {k:'autothin',l:'auto-thin fps', type:'check'}
 ];
 const panel = document.getElementById('tune');
@@ -825,6 +826,25 @@ function schedule(kind){
     pending = null;
   });
 }
+
+/* Density, the mix, the grow-in and the words' clearing only take effect
+   when the field is resown, and resowing mid-drag would be both jarring
+   and expensive. So they queue one: four quiet seconds after the last
+   such change, whichever control it was, the field regrows itself. */
+const REGROW_WAIT = 4000;
+let regrowTimer = null, noteIdle = 'auto-regrows 4s after a change.';
+
+function setNote(s){ const n = document.getElementById('tuneNote'); if(n) n.textContent = s; }
+function cancelRegrow(){
+  if(regrowTimer){ clearTimeout(regrowTimer); regrowTimer = null; }
+}
+function queueRegrow(){
+  cancelRegrow();
+  setNote('regrowing…');
+  regrowTimer = setTimeout(()=>{ regrowTimer = null; seed(); setNote(noteIdle); }, REGROW_WAIT);
+}
+/* Anything that resows right now makes a pending one redundant. */
+function regrowNow(){ cancelRegrow(); seed(); setNote(noteIdle); }
 
 function syncPanel(){
   CONTROLS.forEach(c=>{
@@ -847,7 +867,7 @@ function buildPanel(){
       body.appendChild(group);
       return;
     }
-    const {k, l, min, max, step, type, cost, dp} = c;
+    const {k, l, min, max, step, type, cost, dp, rg} = c;
     const lab = document.createElement('label');
     lab.innerHTML = '<span class="lab">' + l + '<b></b></span>';
     const el = document.createElement('input');
@@ -875,6 +895,7 @@ function buildPanel(){
       else { el.value = P[k]; out.textContent = (+P[k]).toFixed(dp ?? 2); }
       if(cost === 'mark') applyMark();
       if(cost === 'ground' || cost === 'plants') schedule(cost);
+      if(rg) queueRegrow();
     };
 
     el.addEventListener('input', ()=>{
@@ -914,7 +935,9 @@ function buildPanel(){
   })();
 
   document.getElementById('tReset').onclick  = ()=>{
+    cancelRegrow();
     Object.assign(P, DEFAULTS); syncPanel(); applyMark(); rebakePlants(); rebakeGround(); seed();
+    setNote(noteIdle);
   };
   document.getElementById('tCopy').onclick = async ()=>{
     const txt = JSON.stringify(P, null, 2);
@@ -927,7 +950,7 @@ function buildPanel(){
       catch(e2){ note.textContent = 'copy failed -- see console'; console.log(txt); }
       ta.remove();
     }
-    setTimeout(()=>{ note.textContent = 'density needs a regrow.'; }, 4000);
+    setTimeout(()=>{ if(!regrowTimer) note.textContent = noteIdle; }, 4000);
   };
 
   /* The corner links sit above the panel and never move, so options
@@ -936,7 +959,7 @@ function buildPanel(){
   const show = v=>{ panel.hidden = !v; optBtn.setAttribute('aria-expanded', String(v)); };
   document.getElementById('tClose').onclick = ()=>show(false);
   optBtn.onclick = ()=>show(panel.hidden);
-  document.getElementById('tRegrow').onclick = ()=>seed();
+  document.getElementById('tRegrow').onclick = ()=>regrowNow();
   addEventListener('keydown', e=>{
     if(e.key === 'c' && !e.metaKey && !e.ctrlKey && !e.altKey) show(panel.hidden);
     if(e.key === 'Escape') show(false);
@@ -962,6 +985,7 @@ window.tune = obj=>{
   Object.keys(DEFAULTS).forEach(k=>{
     if(typeof obj[k] === typeof DEFAULTS[k]) P[k] = obj[k];
   });
+  cancelRegrow();
   syncPanel(); applyMark(); rebakePlants(); rebakeGround(); seed();
   return {...P};
 };

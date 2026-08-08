@@ -144,6 +144,18 @@ URL opens it on load. The panel itself is hidden by default.
 **Alt-click any control to restore its default**, the way Logic does it.
 Works on sliders, colour swatches and the checkbox.
 
+Some settings only take effect when the field is resown, and resowing
+mid-drag would be jarring and expensive. Those **queue a regrow instead**:
+four quiet seconds after the last such change, whichever control it was,
+the field regrows itself. Touching another one restarts the clock, so a
+run of adjustments costs one resow rather than ten. The note line reads
+`regrowing…` while one is pending. Hitting `regrow` yourself, or `reset`,
+cancels it.
+
+The nine that queue one: `density`, the five `mix` sliders, `size start`,
+`grow seconds`, and `words size` — the last because it also scales the
+clearing sown around the name.
+
 | group | |
 |---|---|
 | **rustle** | amount, speed, duration, radius |
