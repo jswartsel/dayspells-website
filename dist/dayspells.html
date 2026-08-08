@@ -761,16 +761,20 @@ function seed(){
      these, a cluster that would have been blooms is sown as blades
      instead, at full grass weight regardless of what the mix says. It is
      not a hole in the field; it is a different planting. */
-  const ZONE = 1.25;                 // a little wider than the old clearing
+  /* Wider than tall: the wordmark is a long word, and the height reads
+     right at 1.25 while the ends were still crowding. */
+  const ZONE_X = 1.44, ZONE_Y = 1.25;
   const tools = document.querySelector('.tools');
   let toolBox = null;
   if(tools){
     const r = tools.getBoundingClientRect();
     const m = Math.max(44, r.height * 1.8);
-    toolBox = {x0: r.left - m, y0: r.top - m, x1: r.right + m, y1: r.bottom + m};
+    const ex = (r.width + 2*m) * 0.075;      // 15% more width, split both ends
+    toolBox = {x0: r.left - m - ex, y0: r.top - m,
+               x1: r.right + m + ex, y1: r.bottom + m};
   }
   function grassOnly(x, y){
-    if(Math.hypot((x - W/2)/(rx*ZONE), (y - H*0.5)/(ry*ZONE)) < 1) return true;
+    if(Math.hypot((x - W/2)/(rx*ZONE_X), (y - H*0.5)/(ry*ZONE_Y)) < 1) return true;
     return !!toolBox && x >= toolBox.x0 && x <= toolBox.x1
                      && y >= toolBox.y0 && y <= toolBox.y1;
   }

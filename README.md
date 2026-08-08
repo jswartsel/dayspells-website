@@ -146,6 +146,10 @@ The cluster decision uses the field's average rise (the asset is not
 chosen yet); each plant and each companion stem then uses its own.
 With that, the zones measure 100% grass.
 
+The zones are wider than they are tall — `ZONE_X` 1.44 against `ZONE_Y`
+1.25 — because the wordmark is a long word and the height read right
+before the ends did. The corner box gets the same 15% on its width.
+
 ## Tuning panel
 
 Three links sit in the top-right corner, set in the wordmark's face and
