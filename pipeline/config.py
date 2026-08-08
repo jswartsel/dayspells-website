@@ -132,4 +132,14 @@ KEEP = [
 # Colour grade, baked into the assets so the browser does no per-frame work.
 GRADE = dict(saturation=1.26, value=1.16, contrast=0.97)
 
+# --- ground ----------------------------------------------------------------
+# The tile comes from a dedicated photograph of bare linen rather than the
+# cleanest square hunted out of an embroidered panel: nothing to inpaint
+# around, and a big enough crop to average the lighting out. Set
+# LINEN_PHOTO to None to fall back to searching the panels.
+LINEN_PHOTO = 'IMG_1643'
+# Centred crop of the source, in source px, before the downscale to
+# LINEN_TILE. At this photo's 45px weave pitch, 2600 puts ~58 threads in
+# the tile, which is the density the panel-derived tile had.
+LINEN_CROP = 2600
 LINEN_TILE = 512

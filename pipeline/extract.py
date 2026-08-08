@@ -325,14 +325,28 @@ def stage_grass():
 
 
 # --------------------------------------------------------------- 4. linen ---
-def stage_linen():
-    """Cleanest bare square in either panel, scrubbed and made to tile.
+def linen_from_photo():
+    """A square of bare linen, straight from a dedicated photograph.
 
-    Mirror-tiling is the obvious trick and it's wrong: it produces
-    four-fold symmetric blobs that read as wallpaper the moment they
-    repeat. Rolling by half and cross-fading keeps the weave running the
-    same direction everywhere.
+    Preferred over hunting a clean square out of an embroidered panel:
+    there is no stitching to inpaint around, and the crop can be big
+    enough to average out the lighting. LINEN_CROP is chosen so the
+    downscaled tile carries about the same number of threads as the
+    panel-derived one did -- ~58 at a 45px weave pitch.
     """
+    S = C.LINEN_TILE
+    im = ImageOps.exif_transpose(Image.open(photo(C.LINEN_PHOTO)).convert('RGB'))
+    bgr = np.array(im)[:, :, ::-1].copy()
+    h, w = bgr.shape[:2]
+    c = min(C.LINEN_CROP, h, w)
+    y, x = (h - c) // 2, (w - c) // 2
+    crop = bgr[y:y + c, x:x + c]
+    print(f'  {C.LINEN_PHOTO}: {w}x{h} -> centre {c}px -> {S}px tile')
+    return cv2.resize(crop, (S, S), interpolation=cv2.INTER_AREA)
+
+
+def linen_from_panels():
+    """Fallback: the cleanest bare square in either embroidered panel."""
     S = C.LINEN_TILE
     best = None
     for name, tag in C.PANELS:
@@ -345,13 +359,29 @@ def stage_linen():
                     best = (s, name, x, y)
     score, name, X, Y = best
     print(f'  cleanest square: {name} ({X},{Y}) -- {100*score/S**2:.2f}% stitching')
-
     im, d = load_mask(name)
     raw = im[Y:Y + S, X:X + S].copy()
     stray = cv2.dilate((d[Y:Y + S, X:X + S] > C.FG_THRESHOLD).astype(np.uint8),
                        np.ones((15, 15), np.uint8))
     if stray.any():
         raw = cv2.inpaint(raw, stray, 12, cv2.INPAINT_NS)
+    return raw
+
+
+def stage_linen():
+    """Build the seamless ground tile.
+
+    Mirror-tiling is the obvious trick and it's wrong: it produces
+    four-fold symmetric blobs that read as wallpaper the moment they
+    repeat. Rolling by half and cross-fading keeps the weave running the
+    same direction everywhere.
+
+    The high-pass below is what makes a photograph usable: it subtracts a
+    heavy blur of the tile from itself, which removes the lighting
+    falloff across the shot and leaves only the weave.
+    """
+    S = C.LINEN_TILE
+    raw = linen_from_photo() if getattr(C, 'LINEN_PHOTO', None) else linen_from_panels()
 
     p = raw.astype(np.float32)
     p -= cv2.GaussianBlur(p, (0, 0), 80)
