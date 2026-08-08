@@ -138,6 +138,7 @@ URL. It opens by itself on localhost.
 |---|---|
 | **rustle** | amount, speed, duration, radius |
 | **colour** | a tint swatch and a gain, for ground and for plants |
+| **mix** | relative amount of purple, white, yellow, pink, grass |
 | **field** | ground zoom, density |
 | **grow in** | size start, size end, seconds |
 | | auto-thin, and a live fps / drawn / quality readout |
@@ -153,6 +154,19 @@ brush for only a few frames and the spring pulls back the whole time, so
 the response is either dead at the bottom or a cliff at the top. Measured
 lean at the maximum setting: 1.2° / 3.5° / 10.3° / 29.4° / 69.2° across
 0.5–4.
+
+**Mix** multiplies the pool for one colour of bloom, so the colours trade
+against each other rather than adding plants. It exists because role
+weighting alone cannot express it — the purple and white irises are both
+role `flower`. Note that the crocuses are role `small`, of which there
+are only three assets, so each carries a high per-asset weight; purple
+therefore starts out well ahead of white. Measured counts out of ~3200:
+
+| purple / white | purple | white |
+|---|---|---|
+| 0.80 / 1.20 | 382 | 131 |
+| 0.50 / 1.60 | 284 | 215 |
+| 0.35 / 2.00 | 198 | 273 |
 
 **Grow in** ramps the field up from `size start` to `size end` over
 `seconds`, on load and on every regrow. It is a draw-time scale — sprites

@@ -183,33 +183,61 @@ const SHRINK = 0.30;   // assets draw at 30% of source size, before P.size
 
 /* ---------- tunable ---------------------------------------------- */
 /* Everything the panel drives. window.tune(obj) applies a saved set. */
+/* Dialled in on the panel, then pasted back here. */
 const DEFAULTS = {
-  rustle:  1.00,   // how hard the cursor knocks a plant
-  speed:   1.00,   // how fast it swings -- scales the spring frequency
-  settle:  1.00,   // how long it keeps swaying afterwards
+  rustle:  2.90,   // how hard the cursor knocks a plant
+  speed:   0.70,   // how fast it swings -- scales the spring frequency
+  settle:  1.50,   // how long it keeps swaying afterwards
   radius:  150,    // how far from the cursor the wake reaches, in px
 
   /* Colour is a tint plus a gain rather than three channel sliders.
      The tint is normalised to its brightest channel, so it carries hue
      only and white is neutral; the gain then does brightness. Two
      controls instead of three, and you pick a colour by looking at it. */
-  bgTint: '#ffffff', bgGain: 1.00,
-  fgTint: '#ffffff', fgGain: 1.00,
+  bgTint: '#ffffff', bgGain: 1.51,
+  fgTint: '#ffffff', fgGain: 1.44,
 
-  ground:  0.42,   // linen tile scale. lower = finer weave, more zoomed out
-  density: 1.00,
+  ground:  0.50,   // linen tile scale. lower = finer weave, more zoomed out
+  density: 2.50,
 
-  /* The field grows in: sprites are baked at sizeTo and drawn scaled
-     from sizeFrom up to it over grow seconds. Set grow to 0 for none. */
+  /* The field grows in: sprites are baked at size and drawn scaled from
+     sizeFrom up to it over grow seconds. Set grow to 0 for none. */
   sizeFrom: 0.40,
-  size:     1.50,
-  grow:     8.0,
+  size:     1.80,
+  grow:     5.0,
+
+  /* Relative amount of each colour of bloom, and of loose grass. 1.0 is
+     "whatever the role weight already said". These multiply the pool, so
+     they trade against each other rather than adding plants. */
+  mixPurple: 0.80,
+  mixWhite:  1.20,
+  mixYellow: 1.00,
+  mixPink:   1.00,
+  mixGrass:  0.90,
 
   /* The governor thins the field to hold frame rate. It is why plants
      can vanish a few seconds after load on a big window. Off = draw
      everything sown, whatever it costs. */
   autothin: 1
 };
+
+/* Which mix slider an asset answers to, from its name. The crocuses are
+   role 'small' rather than 'flower', but they read as purple, so they
+   move with the irises. Stems are deliberately NOT in 'grass': they are
+   paired to flower heads, and thinning them would strand the flowers. */
+const MIX = [
+  [/^(iris-purple|crocus)/, 'mixPurple'],
+  [/^(iris-white|narcissus)/, 'mixWhite'],
+  [/^daffodil/,              'mixYellow'],
+  [/^iris-pink/,             'mixPink'],
+  [/^blade/,                 'mixGrass']
+];
+function mixOf(a){
+  if(a.role === 'stem') return 1;   // stems are named blade-* too, but they
+  for(const [re, k] of MIX)         // are paired to heads, not scattered
+    if(re.test(a.n)) return P[k];
+  return 1;
+}
 const P = {...DEFAULTS};
 
 /* Plants are sown in clusters, not one at a time: a flower head is
@@ -353,14 +381,22 @@ function seed(){
 
   /* Repeat each asset in its pool by role weight, normalised by how many
      assets that role has -- so adding assets makes a role more varied
-     rather than denser. */
+     rather than denser -- then by the mix multiplier for its colour.
+     Role alone cannot express "fewer purple, more white": the purple and
+     the white irises are both role 'flower'. Reps are kept as floats and
+     resolved probabilistically, or a 20% change to a set of three
+     assets would round away to nothing. */
   function pool(list){
     const out = [], by = {};
     list.forEach(a=>(by[a.role] = by[a.role] || []).push(a));
     Object.keys(by).forEach(role=>{
       const set = by[role];
-      const reps = Math.max(1, Math.round((WEIGHT[role]||1)*30/set.length));
-      set.forEach(a=>{ for(let i=0;i<reps;i++) out.push(a); });
+      set.forEach(a=>{
+        const n = (WEIGHT[role]||1)*30/set.length * mixOf(a);
+        const whole = Math.floor(n);
+        const reps = whole + (Math.random() < n - whole ? 1 : 0);
+        for(let i=0;i<reps;i++) out.push(a);
+      });
     });
     return out;
   }
@@ -669,6 +705,12 @@ const CONTROLS = [
   {k:'bgGain',  l:'ground gain', min:0.2, max:2, step:0.01, cost:'ground'},
   {k:'fgTint',  l:'plants',   type:'color', cost:'plants'},
   {k:'fgGain',  l:'plants gain', min:0.2, max:2, step:0.01, cost:'plants'},
+  {grp:'mix'},
+  {k:'mixPurple', l:'purple', min:0, max:2, step:0.05, cost:'regrow'},
+  {k:'mixWhite',  l:'white',  min:0, max:2, step:0.05, cost:'regrow'},
+  {k:'mixYellow', l:'yellow', min:0, max:2, step:0.05, cost:'regrow'},
+  {k:'mixPink',   l:'pink',   min:0, max:2, step:0.05, cost:'regrow'},
+  {k:'mixGrass',  l:'grass',  min:0, max:2, step:0.05, cost:'regrow'},
   {grp:'field'},
   {k:'ground',  l:'ground zoom', min:0.12, max:1.5, step:0.01, cost:'ground'},
   {k:'density', l:'density',  min:0.2,  max:2.5, step:0.05, cost:'regrow'},
