@@ -75,12 +75,12 @@
   }
   .tools button{
     border:0; background:none; padding:0; cursor:pointer;
-    font-family:inherit; font-weight:700; font-size:14px;
+    font-family:inherit; font-weight:700; font-size:16px;
     text-transform:lowercase; letter-spacing:.14em;
-    color:var(--mark-color); opacity:.86; transition:opacity .18s;
+    color:var(--mark-color); opacity:1;
     text-shadow:0 1px 3px rgba(0,0,0,.55);
   }
-  .tools button:hover{opacity:1}
+  .tools button:hover{text-decoration:underline}   /* opacity is 1 now */
   .tools button[aria-expanded="true"],
   .tools button[aria-pressed="true"]{opacity:1; text-decoration:underline}
   .tune-close{
@@ -89,8 +89,8 @@
   }
   .tune-close:hover{opacity:1}
   .tune{
-    position:fixed; top:40px; right:8px; z-index:8; width:178px;
-    max-height:calc(100vh - 48px); overflow-y:auto;
+    position:fixed; top:44px; right:8px; z-index:8; width:178px;
+    max-height:calc(100vh - 52px); overflow-y:auto;
     padding:8px 10px 10px; border-radius:3px;
     background:rgba(20,15,9,.82); color:var(--cream);
     font-size:9px; letter-spacing:.04em; line-height:1.35;
@@ -546,7 +546,11 @@ let wandering = false, plantQueue = 0;
    hue, so this seeds from whatever colour is set when wander starts
    and writes the result back into P.markColor as it turns. */
 let markH = 0, markS = 0, markL = 0, markT = 0;
-const MARK_STEP = 6, MARK_EVERY = 0.30;
+/* Degrees per second. The wordmark is one CSS custom property, not 26
+   sprites, so it can move every frame -- the stepping that keeps the
+   field cheap just read as a stutter here. Same average rate as the
+   6-degrees-every-0.3s it replaces. */
+const MARK_RATE = 20;
 
 function stepWander(dt){
   let needGround = false, needPlants = false;   // not `plants` -- that's the field
@@ -560,12 +564,12 @@ function stepWander(dt){
     P[w.k] = v;
     if(w.ground) needGround = true; else needPlants = true;
   }
-  markT += dt;
-  if(markT >= MARK_EVERY / Math.max(0.05, P.wanderSpeed)){
+  markH = (markH + MARK_RATE * dt * Math.max(0.05, P.wanderSpeed)) % 360;
+  P.markColor = hslToHex(markH, markS, markL);
+  document.documentElement.style.setProperty('--mark-color', P.markColor);
+  markT += dt;                       // the swatch does not need 60Hz
+  if(markT >= 0.12){
     markT = 0;
-    markH = (markH + MARK_STEP) % 360;
-    P.markColor = hslToHex(markH, markS, markL);
-    applyMark();
     const mi = inputs.markColor;
     if(mi) mi.el.value = P.markColor;
   }

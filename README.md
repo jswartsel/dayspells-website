@@ -155,7 +155,10 @@ The wordmark cycles too. The words expose a colour rather than a hue, so
 wander spins the hue of whatever colour is set and leaves its saturation
 and lightness alone — a red wordmark travels the spectrum at the same
 weight instead of washing out. It wraps rather than bouncing, since 0°
-and 360° are the same colour. The corner links follow it, and the swatch
+and 360° are the same colour, and it **glides** where everything else
+steps: the wordmark is one CSS custom property rather than 26 sprites,
+so it can move every frame, and the stepping that keeps the field cheap
+only read as a stutter here. The corner links follow it, and the swatch
 keeps up, so the colour it stops on is the one you copy.
 
 It steps rather than glides on purpose. Re-colouring continuously cost
