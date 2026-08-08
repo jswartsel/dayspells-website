@@ -129,6 +129,23 @@ stuttering. `density()` in the console reports what's happening.
 | `density()` | `{quality, sown, drawn}` — governor state |
 | `tune(obj)` | apply a saved tuning JSON; returns the current one |
 
+## Grass zones
+
+The wordmark and the corner links each sit in a patch where **only
+grass is sown** — no blooms, no stems, and at full grass weight
+regardless of what the `mix` sliders say. Type reads badly over a bed
+of flowers: too much colour and too much silhouette exactly where the
+eye is trying to resolve letterforms. It is not a hole in the field, it
+is a different planting.
+
+Every zone test is done in **visual space, not anchor space**. A plant
+is rooted at its foot and drawn upward, so testing where it is rooted
+puts the patch a whole plant too high — grass sown along the bottom of
+the zone grows out of the top of it, and blooms rooted below reach in.
+The cluster decision uses the field's average rise (the asset is not
+chosen yet); each plant and each companion stem then uses its own.
+With that, the zones measure 100% grass.
+
 ## Tuning panel
 
 Three links sit in the top-right corner, set in the wordmark's face and

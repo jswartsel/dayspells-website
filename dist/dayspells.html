@@ -755,6 +755,38 @@ function seed(){
      wordmark ends up sitting in undergrowth. */
   const rx = Math.min(W*0.20, 205)*P.markSize, ry = Math.min(H*0.085, 62)*P.markSize;
 
+  /* Grass-only zones: under the wordmark, and under the corner links.
+     Type sits badly on a bed of flowers -- too much colour and too much
+     silhouette right where the eye needs to resolve letterforms. Inside
+     these, a cluster that would have been blooms is sown as blades
+     instead, at full grass weight regardless of what the mix says. It is
+     not a hole in the field; it is a different planting. */
+  const ZONE = 1.25;                 // a little wider than the old clearing
+  const tools = document.querySelector('.tools');
+  let toolBox = null;
+  if(tools){
+    const r = tools.getBoundingClientRect();
+    const m = Math.max(44, r.height * 1.8);
+    toolBox = {x0: r.left - m, y0: r.top - m, x1: r.right + m, y1: r.bottom + m};
+  }
+  function grassOnly(x, y){
+    if(Math.hypot((x - W/2)/(rx*ZONE), (y - H*0.5)/(ry*ZONE)) < 1) return true;
+    return !!toolBox && x >= toolBox.x0 && x <= toolBox.x1
+                     && y >= toolBox.y0 && y <= toolBox.y1;
+  }
+
+  /* Everything above is in SCREEN space, but a plant is anchored at its
+     foot and drawn upward, so testing the foot puts the patch a whole
+     plant too high: grass rooted along the bottom of the zone grows out
+     of the top of it. Every test below is therefore done on where the
+     plant is SEEN, not where it is rooted. For the cluster decision the
+     asset is not chosen yet, so use the field's average rise; per plant,
+     use its own. */
+  const meanRise = ASSETS.length
+    ? 0.95 * ASSETS.reduce((t,a)=>t + (a.dh*0.55 + a.stem), 0) / ASSETS.length
+    : 0;
+  const rise = (a, sc)=>(a.dh*0.55 + a.stem) * sc;
+
   const CELL = 16, grid = new Map();
   function crowded(x,y,r){
     const c0=((x-r)/CELL)|0, c1=((x+r)/CELL)|0, r0=((y-r)/CELL)|0, r1=((y+r)/CELL)|0;
@@ -799,9 +831,9 @@ function seed(){
 
   let guard = 0;
   while(plants.length < target && guard++ < target*5){
-    const asGrass = bladePool.length && (!headPool.length || Math.random() < grassShare);
-    const set  = asGrass ? bladePool : headPool;
-    const lead = pick(set);
+    let asGrass = bladePool.length && (!headPool.length || Math.random() < grassShare);
+    let set  = asGrass ? bladePool : headPool;
+    let lead = pick(set);
 
     let cx, cy;
     if(Math.random() < 0.62){                       // grow near its own kind
@@ -814,8 +846,14 @@ function seed(){
     }
     if(cy < -H*0.16 || cy > H*1.16 || cx < -W*0.14 || cx > W*1.14) continue;
 
-    const q = Math.hypot((cx-W/2)/rx, (cy-H*0.5)/ry);
-    if(q < 1 && Math.random() > Math.pow(q,1.15)) continue;   // clearing for the name
+    /* The colony picked the spot; the zone decides what grows there.
+       Re-picking the lead after the fact is fine -- colonies only ever
+       influenced WHERE a cluster lands, never what it is. Chosen from
+       the unweighted blade list so the grass mix cannot thin these out. */
+    if(grassOnly(cx, cy - meanRise)){
+      if(!blades.length) continue;
+      asGrass = true; set = blades; lead = pick(blades);
+    }
 
     const [lo,hi] = asGrass ? CLUSTER.grass : CLUSTER.flower;
     const k    = lo + ((Math.random()*(hi-lo+1))|0);
@@ -828,6 +866,13 @@ function seed(){
       if(y < -H*0.16 || y > H*1.16) continue;
       const depth = Math.min(1, Math.max(0, (y + H*0.14)/(H*1.28)));
       const sc = (0.70 + depth*0.34) * rnd(0.80,1.24);
+      /* The zone test above is on the cluster centre, and a cluster
+         centred just outside can still fling a member in. Check each
+         plant too -- and check where its HEAD lands, not its foot: a
+         plant is anchored at the ground and drawn upward, so one rooted
+         below the zone can still push a bloom into it. Must come after
+         sc, which it needs to know how tall this plant draws. */
+      if(!asGrass && grassOnly(x, y - rise(a, sc))) continue;
       /* Rank is shared by a head and its own stem, so thinning never
          leaves a flower floating over nothing -- but NOT shared across
          the cluster, or the governor would drop whole clumps at once
@@ -839,7 +884,11 @@ function seed(){
          what puts it behind the head once plants are sorted for drawing. */
       if(place(a, x, y, sc, rank, false)
          && !asGrass && stems.length && Math.random() < STEM_PAIR){
-        place(pick(stems), x + rnd(-3,3), y - 0.5, sc*rnd(0.82,1.06), rank, true);
+        /* Stems are the tallest things in the field, so one paired to
+           a head that cleared the zone can still reach into it. */
+        const st = pick(stems), ss = sc*rnd(0.82,1.06);
+        if(!grassOnly(x, y - rise(st, ss)))
+          place(st, x + rnd(-3,3), y - 0.5, ss, rank, true);
       }
     }
   }
