@@ -127,8 +127,8 @@
 <div class="loading" id="loading">threading</div>
 
 <div class="tools">
+  <button id="tWander" aria-pressed="false" title="drift the colors">wander</button>
   <button id="tRegrow" title="resow the field">regrow</button>
-  <button id="tWander" aria-pressed="false" title="drift the colours">wander</button>
   <button id="tOptions" aria-expanded="false" aria-controls="tune">tweak</button>
 </div>
 <div class="tune" id="tune" hidden>
@@ -772,12 +772,13 @@ function seed(){
      is sown there at all, so the linen shows through. Two of its four
      edges run off the screen, so it reads as a cleared corner rather
      than a rectangle cut out of the middle of a meadow. */
+  const BARE = 0.80;                 // margin scale around the links
   const tools = document.querySelector('.tools');
   let toolBox = null;
   if(tools){
     const r = tools.getBoundingClientRect();
-    const m = Math.max(44, r.height * 1.8);
-    const ex = (r.width + 2*m) * 0.075;
+    const m = Math.max(44, r.height * 1.8) * BARE;
+    const ex = (r.width + 2*m) * 0.075 * BARE;
     toolBox = {x0: r.left - m - ex, y0: r.top - m,
                x1: r.right + m + ex, y1: r.bottom + m};
   }
@@ -803,7 +804,9 @@ function seed(){
     ? 0.95 * ASSETS.reduce((t,a)=>t + (a.dh*0.55 + a.stem), 0) / ASSETS.length
     : 0;
   const rise = (a, sc)=>(a.dh*0.55 + a.stem) * sc;
-  const ZONE_GRASS = 1.20;           // extra blades sown in the clearing
+  /* Multiplier on the clearing's natural grass density. Above 1 the
+     pass sows more, below 1 it thins -- 1.20 was too thick. */
+  const ZONE_GRASS = 0.84;
 
   const CELL = 16, grid = new Map();
   function crowded(x,y,r){
@@ -923,6 +926,18 @@ function seed(){
     const seen = p => grassOnly(p.x, p.y - rise(p.a, p.s));
     let have = plants.filter(seen).length;
     const want = Math.round(have * ZONE_GRASS);
+
+    if(want < have){                   // thin it back out again
+      const idx = [];
+      plants.forEach((p, i)=>{ if(seen(p)) idx.push(i); });
+      for(let i = idx.length - 1; i > 0; i--){
+        const j = (Math.random()*(i+1))|0; const t = idx[i]; idx[i] = idx[j]; idx[j] = t;
+      }
+      const drop = new Set(idx.slice(0, have - want));
+      plants = plants.filter((p, i)=>!drop.has(i));
+      have = want;
+    }
+
     let g2 = 0;
     while(have < want && g2++ < want*12){
       const a  = pick(blades);
@@ -1141,19 +1156,19 @@ const CONTROLS = [
   {k:'radius',  l:'radius',   min:40,   max:600, step:5,   dp:0},
   {grp:'wander'},
   {k:'wanderSpeed', l:'speed', min:0.25, max:6, step:0.05},
-  {grp:'ground colour'},
+  {grp:'ground color'},
   {k:'bgHue',   l:'hue',   min:0, max:360, step:1, dp:0, cost:'ground'},
   {k:'bgSat',   l:'sat',   min:0, max:2.5, step:0.02, cost:'ground'},
   {k:'bgGain',  l:'gain',  min:0.2, max:2, step:0.01, cost:'ground'},
   {k:'bgTint',  l:'tint',  type:'color', cost:'ground'},
-  {grp:'plant colour'},
+  {grp:'plant color'},
   {k:'fgHue',   l:'hue',   min:0, max:360, step:1, dp:0, cost:'plants'},
   {k:'fgSat',   l:'sat',   min:0, max:2.5, step:0.02, cost:'plants'},
   {k:'fgGain',  l:'gain',  min:0.2, max:2, step:0.01, cost:'plants'},
   {k:'fgTint',  l:'tint',  type:'color', cost:'plants'},
   {grp:'words'},
   {k:'markSize',  l:'size',  min:0.3, max:3, step:0.02, cost:'mark'},
-  {k:'markColor', l:'colour', type:'color', cost:'mark'},
+  {k:'markColor', l:'color', type:'color', cost:'mark'},
   {grp:'mix'},
   {k:'mixPurple', l:'purple', min:0, max:2, step:0.05, cost:'regrow', rg:1},
   {k:'mixWhite',  l:'white',  min:0, max:2, step:0.05, cost:'regrow', rg:1},

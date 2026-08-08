@@ -156,18 +156,18 @@ full below.
 
 The clearing fills only with whatever clusters happen to centre inside
 it, which leaves it thinner than the field around it, so a top-up pass
-sows single blades until it carries `ZONE_GRASS` (1.20) more than it
-did. That needs a tighter crowding radius — at the default the zone is
-already packed and every extra blade is refused. Verified hitting 1.20×
-exactly on five consecutive regrows.
+brings the clearing to `ZONE_GRASS` (0.84) of its natural density —
+sowing single blades when the target is above 1, thinning at random
+when it is below. Sowing needs a tighter crowding radius, since at the
+default the zone is already packed and every extra blade is refused.
 
 ## Tuning panel
 
 Three links sit in the top-right corner, set in the wordmark's face and
 colour so they read as part of the page rather than as chrome:
 
+- **wander** — drift the colors (toggle)
 - **regrow** — resow the field
-- **wander** — drift the colours (toggle)
 - **tweak** — toggle the panel
 
 They stay put while the panel is open, so `tweak` is always there to
@@ -249,8 +249,8 @@ than a stale clearing. The clearing catches up on the next regrow.
 |---|---|
 | **rustle** | amount, speed, duration, radius |
 | **wander** | speed of the colour drift |
-| **ground colour** | hue, sat, gain, tint |
-| **plant colour** | hue, sat, gain, tint |
+| **ground color** | hue, sat, gain, tint |
+| **plant color** | hue, sat, gain, tint |
 | **words** | size and colour of the name |
 | **mix** | relative amount of purple, white, yellow, pink, grass |
 | **field** | ground zoom, density |
