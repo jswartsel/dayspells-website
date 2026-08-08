@@ -136,11 +136,12 @@ colour so they read as part of the page rather than as chrome:
 
 - **regrow** — resow the field
 - **wander** — drift the colours (toggle)
-- **options** — toggle the panel
+- **tweak** — toggle the panel
 
 **Wander** walks the four hue and saturation sliders on their own, each
 bouncing between its bounds on its own interval — hue every 0.25s and
-0.40s, saturation every 0.65s and 0.75s. The intervals are deliberately
+0.40s, saturation every 0.65s and 0.75s, all divided by `wander speed`
+(2.0 by default, so twice that pace). The intervals are deliberately
 unequal so the four never line up, and the combinations end up somewhere
 nobody picked. Touching any of those four sliders takes back control and
 stops it; toggling it off leaves the values where they landed, so you can
@@ -165,7 +166,7 @@ than after, took that to 11.9ms and removed all per-frame allocation.
 > ground walkers only redo one small tile. Turning **auto-thin** on also
 > protects frame rate, and it is off in the current defaults.
 
-They stay put while the panel is open, so `options` is always there to
+They stay put while the panel is open, so `tweak` is always there to
 close it again. `c` toggles and `Esc` closes as well, and `#tune` in the
 URL opens it on load. The panel itself is hidden by default.
 
@@ -192,6 +193,7 @@ than a stale clearing. The clearing catches up on the next regrow.
 | group | |
 |---|---|
 | **rustle** | amount, speed, duration, radius |
+| **wander** | speed of the colour drift |
 | **ground colour** | hue, sat, gain, tint |
 | **plant colour** | hue, sat, gain, tint |
 | **words** | size and colour of the name |
