@@ -131,8 +131,13 @@ stuttering. `density()` in the console reports what's happening.
 
 ## Tuning panel
 
-Hidden by default. Press `c`, click the dot in the top-right corner, or
-add `#tune` to the URL. `Esc` closes it.
+Hidden by default. Open it with the pulsing beacon in the top-right
+corner, the `c` key, or `#tune` in the URL. Close it with the `×`, `Esc`,
+or `c` again. The beacon hides itself while the panel is open — the panel
+covers that corner, so leaving it there meant no way back out.
+
+**Alt-click any control to restore its default**, the way Logic does it.
+Works on sliders, colour swatches and the checkbox.
 
 | group | |
 |---|---|
