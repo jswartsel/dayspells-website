@@ -85,6 +85,22 @@ first for what the project is and how to run it.
 - **Grow-in is a draw-time scale.** Sprites are baked at `size end` and
   drawn scaled up from `size start`. Re-baking 26 assets every frame for
   eight seconds would be absurd.
+- **The frame is destination-pixel bound, not source-pixel bound.**
+  Measured: physics is 3.3ms of a 130ms frame (2.5%); the ground fill and
+  the vignette are a few ms each; halving the plant count doubles the
+  frame rate. It is sprite fill, and essentially nothing else. Cutting
+  the baked sprite resolution by 39% changed the frame rate not at all.
+  So the levers are, in order: **on-screen size** (area, so quadratic),
+  **plant count**, and **DPR** — not asset resolution, not cleverness in
+  the loop. Lowering the payload's image resolution only helps if the
+  flowers get smaller with it; raise `size` to compensate and you are
+  back where you started, just blurrier.
+- **Overdraw is the number to watch.** At size 1.7 / density 2.5 / DPR
+  1.5 the field asks for 21.2 Mpx of alpha-blended sprite fill per frame
+  against a 2.92 Mpx canvas — **7.3x overdraw**. size 1.3 takes it to
+  5.3x, size 1.0 to 4.0x. Density is the weaker lever than it looks,
+  because the crowding grid absorbs some of it: 2.5 -> 1.5 drops 38% of
+  the plants but only 16% of the pixels.
 - **Never re-bake sprites per frame.** Wander was first written to
   re-colour continuously, which cost 15.4ms of a 16.7ms frame — an order
   of magnitude more than the synchronous timing suggested (0.47ms/sprite),

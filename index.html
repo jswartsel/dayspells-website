@@ -360,7 +360,14 @@ function applyMatrix(g, w, h, M){
    colour at all -- it only has to be rebuilt when the draw size changes.
    Everything here allocates; nothing here runs on a colour change. */
 function ensureBake(a){
-  const q  = Math.min(2.2, (devicePixelRatio||1)*1.2);
+  /* Bake at the resolution the CANVAS renders at, not the screen's.
+     This used to be min(2.2, devicePixelRatio*1.2), which on a retina
+     display baked at 2.2 while the canvas ran at DPR 1.5 -- every plant
+     then read 2.16x more source pixels than it wrote, and paid for a
+     downscale filter on top, on every blit of every frame. The 1.15 is
+     headroom for the largest per-plant scale (p.s tops out near 1.3);
+     beyond that a plant softens slightly rather than costing everyone. */
+  const q  = Math.min(2.0, DPR * 1.15);
   const sc = SHRINK * P.size;
   const dw = a.w*sc, dh = a.h*sc;
   const mw = Math.max(2, Math.round(dw*q)), mh = Math.max(2, Math.round(dh*q));
@@ -413,6 +420,7 @@ function recolour(a, M){
 }
 
 let ASSETS = [], linenImg = null, linenPat = null;
+const pickDPR = ()=>Math.min(1.5, devicePixelRatio || 1);
 
 /* ASSETS objects are created once and mutated in place, so a colour or
    size change re-bakes the sprites without disturbing the field the
@@ -553,6 +561,7 @@ async function boot(){
     if(!imgs[i]) return;
     ASSETS.push({...a, img: imgs[i], stemSrc: a.stem});
   });
+  DPR = pickDPR();          // ensureBake reads this
   rebakePlants();
   rebakeGround();
   applyMark();
@@ -728,14 +737,25 @@ function seed(){
 window.regrow = ()=>seed();
 
 function resize(){
-  DPR = Math.min(1.5, devicePixelRatio||1);
+  const wasDPR = DPR;
+  DPR = pickDPR();
+  if(DPR !== wasDPR && ASSETS.length) rebakePlants();
   W = innerWidth; H = innerHeight;
   canvas.width = Math.round(W*DPR); canvas.height = Math.round(H*DPR);
   canvas.style.width = W+'px'; canvas.style.height = H+'px';
   ctx.setTransform(DPR,0,0,DPR,0,0);
-  vig = ctx.createRadialGradient(W/2,H/2,Math.min(W,H)*0.34,W/2,H/2,Math.max(W,H)*0.82);
-  vig.addColorStop(0,'rgba(26,19,11,0)');
-  vig.addColorStop(1,'rgba(26,19,11,.24)');
+  /* Baked to a bitmap once per resize. Filling a radial gradient
+     across the whole canvas every frame is markedly dearer than
+     blitting the same pixels back. */
+  vig = document.createElement('canvas');
+  vig.width = canvas.width; vig.height = canvas.height;
+  const vg = vig.getContext('2d');
+  const grad = vg.createRadialGradient(
+    canvas.width/2, canvas.height/2, Math.min(canvas.width,canvas.height)*0.34,
+    canvas.width/2, canvas.height/2, Math.max(canvas.width,canvas.height)*0.82);
+  grad.addColorStop(0,'rgba(26,19,11,0)');
+  grad.addColorStop(1,'rgba(26,19,11,.24)');
+  vg.fillStyle = grad; vg.fillRect(0,0,vig.width,vig.height);
   seed();
 }
 addEventListener('resize', resize);
@@ -899,9 +919,9 @@ function frame(now){
     ctx.drawImage(a.cv, a.dx, a.dy, a.cw, a.ch);
   }
 
-  ctx.setTransform(DPR,0,0,DPR,0,0);
+  ctx.setTransform(1,0,0,1,0,0);
   ctx.globalAlpha = 1;
-  ctx.fillStyle = vig; ctx.fillRect(0,0,W,H);
+  if(vig) ctx.drawImage(vig, 0, 0);
 
   requestAnimationFrame(frame);
 }
