@@ -131,23 +131,40 @@ stuttering. `density()` in the console reports what's happening.
 
 ## Tuning panel
 
-Press `c`, click the dot in the top-right corner, or add `#tune` to the
-URL. It opens by itself on localhost.
+Hidden by default. Press `c`, click the dot in the top-right corner, or
+add `#tune` to the URL. `Esc` closes it.
 
 | group | |
 |---|---|
 | **rustle** | amount, speed, duration, radius |
-| **colour** | a tint swatch and a gain, for ground and for plants |
+| **ground colour** | hue, sat, gain, tint |
+| **plant colour** | hue, sat, gain, tint |
 | **wordmark** | size and colour of the name |
 | **mix** | relative amount of purple, white, yellow, pink, grass |
 | **field** | ground zoom, density |
 | **grow in** | size start, size end, seconds |
 | | auto-thin, and a live fps / drawn / quality readout |
 
-Colour is a **tint plus a gain** rather than three channel sliders. The
-tint is normalised to its brightest channel, so it carries hue only and
-white is exactly neutral at any gain; the gain does brightness. Two
-controls instead of three, and you pick the colour by looking at it.
+**Hue** is the one-slider mood control. It rotates every colour at once
+and keeps the relationships between them, so the wool still reads as wool
+a long way round. The ground sweeps olive → teal → periwinkle →
+chartreuse across a full turn. **Sat** runs from grey to lurid.
+
+**Gain** is brightness and **tint** is a colour cast, kept from the
+earlier design. The tint is normalised to its brightest channel, so it
+carries hue only and white is exactly neutral at any gain.
+
+All four compose into a single 3×3 colour matrix, applied in one pass:
+gain and tint, then hue, then saturation. At the defaults it is exactly
+the identity, so nothing is touched until you move something.
+
+> **Gain and hue fight each other.** Gain above ~1.2 pushes pale material
+> out of gamut, and the clamp that brings it back flattens the hue away.
+> At `bgGain 1.51` the linen computes to `[343,313,202]` — two channels
+> clipped — so the ground hardly responds to hue at all. Saturated,
+> mid-tone assets are fine: a purple iris at `fgGain 1.44` is
+> `[216,79,230]`, nothing clipped, and rotates to a deep green at 180.
+> **If you want to use hue on the ground, drop `bgGain` to about 1.0.**
 
 **Rustle amount** is a gain on the drawn angle, not just a harder shove.
 Driving it through the impulse alone doesn't work — a plant is inside the

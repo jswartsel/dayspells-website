@@ -196,8 +196,11 @@ const DEFAULTS = {
      The tint is normalised to its brightest channel, so it carries hue
      only and white is neutral; the gain then does brightness. Two
      controls instead of three, and you pick a colour by looking at it. */
-  bgTint: '#ffffff', bgGain: 1.51,
-  fgTint: '#ffffff', fgGain: 1.44,
+  /* Hue is the one-slider mood control: it rotates every colour at once
+     and keeps the relationships between them, so the wool still reads as
+     wool at 200 degrees round. Saturation runs from grey to lurid. */
+  bgTint: '#ffffff', bgGain: 1.51, bgHue: 0, bgSat: 1.00,
+  fgTint: '#ffffff', fgGain: 1.44, fgHue: 0, fgSat: 1.00,
 
   ground:  0.50,   // linen tile scale. lower = finer weave, more zoomed out
   density: 2.00,
@@ -274,18 +277,55 @@ function gains(hex, gain){
   return [r/m*gain, g/m*gain, b/m*gain];
 }
 
-/* Per-channel gain. Alpha is left alone, so cutouts keep their edges. */
-function tint(img, r, g, b){
+/* Colour is one 3x3 matrix: gain and tint, then hue rotation, then
+   saturation. Composing them means a single pass over the pixels however
+   many of the four are in play. Luminance coefficients are the sRGB ones
+   the SVG filter spec uses, so a hue rotation holds its brightness. */
+const LR = 0.213, LG = 0.715, LB = 0.072;
+const IDENTITY = [1,0,0, 0,1,0, 0,0,1];
+
+function matMul(a, b){
+  const o = new Array(9);
+  for(let i=0;i<3;i++) for(let j=0;j<3;j++)
+    o[i*3+j] = a[i*3]*b[j] + a[i*3+1]*b[3+j] + a[i*3+2]*b[6+j];
+  return o;
+}
+function hueMat(deg){
+  const a = deg*Math.PI/180, c = Math.cos(a), s = Math.sin(a);
+  return [
+    LR + c*(1-LR) - s*LR,      LG - c*LG - s*LG,        LB - c*LB + s*(1-LB),
+    LR - c*LR + s*0.143,       LG + c*(1-LG) + s*0.140, LB - c*LB - s*0.283,
+    LR - c*LR - s*(1-LR),      LG - c*LG + s*LG,        LB + c*(1-LB) + s*LB
+  ];
+}
+function satMat(s){
+  return [
+    LR + s*(1-LR), LG - s*LG,     LB - s*LB,
+    LR - s*LR,     LG + s*(1-LG), LB - s*LB,
+    LR - s*LR,     LG - s*LG,     LB + s*(1-LB)
+  ];
+}
+function colourMatrix(hex, gain, hue, sat){
+  const g = gains(hex, gain);
+  const m = matMul(satMat(sat), matMul(hueMat(hue), [g[0],0,0, 0,g[1],0, 0,0,g[2]]));
+  return m;
+}
+
+/* Alpha is left alone, so cutouts keep their edges. */
+function colourize(img, M){
   const c = document.createElement('canvas');
   c.width = img.width; c.height = img.height;
   const g2 = c.getContext('2d', {willReadFrequently:true});
   g2.drawImage(img, 0, 0);
-  if(r===1 && g===1 && b===1) return c;
+  let flat = true;
+  for(let i=0;i<9;i++) if(Math.abs(M[i]-IDENTITY[i]) > 1e-4){ flat = false; break; }
+  if(flat) return c;
   const d = g2.getImageData(0, 0, c.width, c.height), px = d.data;
   for(let i=0;i<px.length;i+=4){
-    px[i]   = Math.min(255, px[i]  *r);
-    px[i+1] = Math.min(255, px[i+1]*g);
-    px[i+2] = Math.min(255, px[i+2]*b);
+    const r = px[i], g = px[i+1], b = px[i+2];
+    px[i]   = Math.max(0, Math.min(255, M[0]*r + M[1]*g + M[2]*b));
+    px[i+1] = Math.max(0, Math.min(255, M[3]*r + M[4]*g + M[5]*b));
+    px[i+2] = Math.max(0, Math.min(255, M[6]*r + M[7]*g + M[8]*b));
   }
   g2.putImageData(d, 0, 0);
   return c;
@@ -327,11 +367,11 @@ let ASSETS = [], linenImg = null, linenPat = null;
    size change re-bakes the sprites without disturbing the field the
    plants are already standing in. */
 function rebakePlants(){
-  const gn = gains(P.fgTint, P.fgGain);
+  const M = colourMatrix(P.fgTint, P.fgGain, P.fgHue, P.fgSat);
   ASSETS.forEach(a=>{
     const sc = SHRINK * P.size;
     const dw = a.w*sc, dh = a.h*sc;
-    const b  = bakePlant(tint(a.img, gn[0], gn[1], gn[2]), dw, dh);
+    const b  = bakePlant(colourize(a.img, M), dw, dh);
     a.dw = dw; a.dh = dh; a.stem = a.stemSrc*sc;
     a.cv = b.cv; a.pd = b.pd; a.cw = b.w; a.ch = b.h;
     a.dx = -dw/2 - b.pd; a.dy = -dh - a.stem - b.pd;
@@ -343,8 +383,7 @@ function rebakePlants(){
    1:1 the linen reads as burlap rather than as ground seen from above. */
 function rebakeGround(){
   if(!linenImg) return;
-  const gn = gains(P.bgTint, P.bgGain);
-  const t = tint(linenImg, gn[0], gn[1], gn[2]);
+  const t = colourize(linenImg, colourMatrix(P.bgTint, P.bgGain, P.bgHue, P.bgSat));
   const s = Math.max(24, Math.round(t.width * P.ground));
   const c = document.createElement('canvas');
   c.width = s; c.height = s;
@@ -722,11 +761,16 @@ const CONTROLS = [
   {k:'speed',   l:'speed',    min:0.2,  max:3,   step:0.05},
   {k:'settle',  l:'duration', min:0.2,  max:4,   step:0.05},
   {k:'radius',  l:'radius',   min:40,   max:600, step:5,   dp:0},
-  {grp:'colour'},
-  {k:'bgTint',  l:'ground',   type:'color', cost:'ground'},
-  {k:'bgGain',  l:'ground gain', min:0.2, max:2, step:0.01, cost:'ground'},
-  {k:'fgTint',  l:'plants',   type:'color', cost:'plants'},
-  {k:'fgGain',  l:'plants gain', min:0.2, max:2, step:0.01, cost:'plants'},
+  {grp:'ground colour'},
+  {k:'bgHue',   l:'hue',   min:0, max:360, step:1, dp:0, cost:'ground'},
+  {k:'bgSat',   l:'sat',   min:0, max:2.5, step:0.02, cost:'ground'},
+  {k:'bgGain',  l:'gain',  min:0.2, max:2, step:0.01, cost:'ground'},
+  {k:'bgTint',  l:'tint',  type:'color', cost:'ground'},
+  {grp:'plant colour'},
+  {k:'fgHue',   l:'hue',   min:0, max:360, step:1, dp:0, cost:'plants'},
+  {k:'fgSat',   l:'sat',   min:0, max:2.5, step:0.02, cost:'plants'},
+  {k:'fgGain',  l:'gain',  min:0.2, max:2, step:0.01, cost:'plants'},
+  {k:'fgTint',  l:'tint',  type:'color', cost:'plants'},
   {grp:'wordmark'},
   {k:'markSize',  l:'size',  min:0.3, max:3, step:0.02, cost:'mark'},
   {k:'markColor', l:'colour', type:'color', cost:'mark'},
@@ -855,8 +899,8 @@ function buildPanel(){
     if(e.key === 'c' && !e.metaKey && !e.ctrlKey && !e.altKey) show(panel.hidden);
     if(e.key === 'Escape') show(false);
   });
-  if(location.hash.includes('tune') ||
-     location.hostname === 'localhost' || location.hostname === '127.0.0.1') show(true);
+  /* Hidden by default everywhere. The corner dot, `c`, or #tune opens it. */
+  if(location.hash.includes('tune')) show(true);
 }
 
 /* Apply a saved set: window.tune({...}) */

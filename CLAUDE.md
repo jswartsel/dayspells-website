@@ -85,6 +85,17 @@ first for what the project is and how to run it.
 - **Grow-in is a draw-time scale.** Sprites are baked at `size end` and
   drawn scaled up from `size start`. Re-baking 26 assets every frame for
   eight seconds would be absurd.
+- **Colour is one 3×3 matrix**, composed from gain+tint, hue and
+  saturation and applied in a single pass over the pixels. It is exactly
+  the identity at the defaults, so the untouched case costs nothing. Use
+  the sRGB luminance coefficients (0.213/0.715/0.072) the SVG filter spec
+  uses, or hue rotation stops holding its brightness.
+- **Gain above ~1.2 eats the hue control.** Bright material goes out of
+  gamut and the output clamp flattens the difference: at `bgGain 1.51`
+  the linen computes to `[343,313,202]`, two channels clipped, and the
+  ground barely responds to `bgHue`. This is gamut, not a bug — no colour
+  space fixes it. Mid-tone assets are unaffected. If someone reports the
+  hue slider "not doing anything", check their gain first.
 
 ## Known issues, not yet fixed
 
