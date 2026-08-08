@@ -152,9 +152,14 @@ run of adjustments costs one resow rather than ten. The note line reads
 `regrowing…` while one is pending. Hitting `regrow` yourself, or `reset`,
 cancels it.
 
-The nine that queue one: `density`, the five `mix` sliders, `size start`,
-`grow seconds`, and `words size` — the last because it also scales the
-clearing sown around the name.
+The eight that queue one: `density`, the five `mix` sliders, `size start`
+and `grow seconds`. The last two only show during the grow-in ramp, which
+has already finished by the time you touch them.
+
+`words size` deliberately does **not**. It scales the clearing sown
+around the name as well as the type, but the type resizes instantly and
+having the field re-scatter underneath it a few seconds later is worse
+than a stale clearing. The clearing catches up on the next regrow.
 
 | group | |
 |---|---|

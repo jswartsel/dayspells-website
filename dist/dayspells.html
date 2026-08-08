@@ -232,8 +232,11 @@ const DEFAULTS = {
   grow:     8.0,
 
   /* The words. markSize also widens the clearing sown around them, so
-     the name does not end up sitting in undergrowth -- that part is in
-     seed(), so it needs a regrow. */
+     the name does not end up sitting in undergrowth -- but that part is
+     in seed(), and deliberately does NOT queue an auto-regrow: the type
+     resizes instantly while the field would re-scatter underneath it a
+     few seconds later, which is worse than a stale clearing. The
+     clearing catches up on the next regrow. */
   markSize:  1.30,
   markColor: '#f4451f',
 
@@ -792,7 +795,7 @@ const CONTROLS = [
   {k:'fgGain',  l:'gain',  min:0.2, max:2, step:0.01, cost:'plants'},
   {k:'fgTint',  l:'tint',  type:'color', cost:'plants'},
   {grp:'words'},
-  {k:'markSize',  l:'size',  min:0.3, max:3, step:0.02, cost:'mark', rg:1},
+  {k:'markSize',  l:'size',  min:0.3, max:3, step:0.02, cost:'mark'},
   {k:'markColor', l:'colour', type:'color', cost:'mark'},
   {grp:'mix'},
   {k:'mixPurple', l:'purple', min:0, max:2, step:0.05, cost:'regrow', rg:1},
