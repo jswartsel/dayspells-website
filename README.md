@@ -131,8 +131,7 @@ stuttering. `density()` in the console reports what's happening.
 
 ## Grass zones
 
-The wordmark and the corner links each sit in a patch where **only
-grass is sown** — no blooms, no stems, and at full grass weight
+The wordmark sits in a patch where **only grass is sown** — no blooms, no stems, and at full grass weight
 regardless of what the `mix` sliders say. Type reads badly over a bed
 of flowers: too much colour and too much silhouette exactly where the
 eye is trying to resolve letterforms. It is not a hole in the field, it
@@ -146,9 +145,17 @@ The cluster decision uses the field's average rise (the asset is not
 chosen yet); each plant and each companion stem then uses its own.
 With that, the zones measure 100% grass.
 
-The zones are wider than they are tall — `ZONE_X` 1.44 against `ZONE_Y`
-1.25 — because the wordmark is a long word and the height read right
-before the ends did. The corner box gets the same 15% on its width.
+The zone is wider than it is tall — `ZONE_X` 1.44 against `ZONE_Y` 1.25
+— because the wordmark is a long word. It is also cut short above the
+type (`ZONE_TOP` 0.75) so flower heads come closer from above, and left
+full below.
+
+The clearing fills only with whatever clusters happen to centre inside
+it, which leaves it thinner than the field around it, so a top-up pass
+sows single blades until it carries `ZONE_GRASS` (1.20) more than it
+did. That needs a tighter crowding radius — at the default the zone is
+already packed and every extra blade is refused. Verified hitting 1.20×
+exactly on five consecutive regrows.
 
 ## Tuning panel
 

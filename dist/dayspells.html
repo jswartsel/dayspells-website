@@ -75,10 +75,9 @@
   }
   .tools button{
     border:0; background:none; padding:0; cursor:pointer;
-    font-family:inherit; font-weight:700; font-size:16px;
+    font-family:inherit; font-weight:700; font-size:14px;
     text-transform:lowercase; letter-spacing:.14em;
     color:var(--mark-color); opacity:1;
-    text-shadow:0 1px 3px rgba(0,0,0,.55);
   }
   .tools button:hover{text-decoration:underline}   /* opacity is 1 now */
   .tools button[aria-expanded="true"],
@@ -764,19 +763,14 @@ function seed(){
   /* Wider than tall: the wordmark is a long word, and the height reads
      right at 1.25 while the ends were still crowding. */
   const ZONE_X = 1.44, ZONE_Y = 1.25;
-  const tools = document.querySelector('.tools');
-  let toolBox = null;
-  if(tools){
-    const r = tools.getBoundingClientRect();
-    const m = Math.max(44, r.height * 1.8);
-    const ex = (r.width + 2*m) * 0.075;      // 15% more width, split both ends
-    toolBox = {x0: r.left - m - ex, y0: r.top - m,
-               x1: r.right + m + ex, y1: r.bottom + m};
-  }
+  /* The clearing is cut short above the type so flower heads come closer
+     from the top, and left full below. Only the wordmark gets a zone --
+     the corner links sit in the field like everything else. */
+  const ZONE_TOP = 0.75;
   function grassOnly(x, y){
-    if(Math.hypot((x - W/2)/(rx*ZONE_X), (y - H*0.5)/(ry*ZONE_Y)) < 1) return true;
-    return !!toolBox && x >= toolBox.x0 && x <= toolBox.x1
-                     && y >= toolBox.y0 && y <= toolBox.y1;
+    const dy = y - H*0.5;
+    const ryE = (dy < 0 ? ZONE_TOP : 1) * ry * ZONE_Y;
+    return Math.hypot((x - W/2)/(rx*ZONE_X), dy/ryE) < 1;
   }
 
   /* Everything above is in SCREEN space, but a plant is anchored at its
@@ -790,6 +784,7 @@ function seed(){
     ? 0.95 * ASSETS.reduce((t,a)=>t + (a.dh*0.55 + a.stem), 0) / ASSETS.length
     : 0;
   const rise = (a, sc)=>(a.dh*0.55 + a.stem) * sc;
+  const ZONE_GRASS = 1.20;           // extra blades sown in the clearing
 
   const CELL = 16, grid = new Map();
   function crowded(x,y,r){
@@ -811,8 +806,8 @@ function seed(){
      head's companion stem, which is meant to sit directly under it: if
      the stem goes down first and takes part in the test, it blocks the
      very head it belongs to and almost no flowers survive. */
-  function place(a, x, y, sc, rank, free){
-    if(!free && crowded(x, y, Math.max(4, a.dw*sc*0.32))) return false;
+  function place(a, x, y, sc, rank, free, crowdMul){
+    if(!free && crowded(x, y, Math.max(4, a.dw*sc*(crowdMul || 0.32)))) return false;
     const depth = Math.min(1, Math.max(0, (y + H*0.14)/(H*1.28)));
     const p = {
       a, x, y, s: sc,
@@ -896,6 +891,28 @@ function seed(){
       }
     }
   }
+  /* The clearing fills only with whatever clusters happened to centre
+     inside it, which leaves it thinner than the field around it. Top it
+     up with single blades until it carries ZONE_GRASS more than it did.
+     A tighter crowding radius is what makes room -- at the default the
+     zone is already packed and every extra blade would be refused. */
+  if(blades.length){
+    const seen = p => grassOnly(p.x, p.y - rise(p.a, p.s));
+    let have = plants.filter(seen).length;
+    const want = Math.round(have * ZONE_GRASS);
+    let g2 = 0;
+    while(have < want && g2++ < want*12){
+      const a  = pick(blades);
+      const th = Math.random()*Math.PI*2, rr = Math.sqrt(Math.random());
+      const ux = Math.cos(th)*rr, uy = Math.sin(th)*rr;
+      const vx = W/2 + ux*rx*ZONE_X;
+      const vy = H*0.5 + uy*(uy < 0 ? ZONE_TOP : 1)*ry*ZONE_Y;
+      const depth = Math.min(1, Math.max(0, (vy + H*0.14)/(H*1.28)));
+      const sc = (0.70 + depth*0.34) * rnd(0.80,1.24);
+      if(place(a, vx, vy + rise(a, sc), sc, Math.random(), false, 0.24)) have++;
+    }
+  }
+
   plants.sort((p,q)=>p.y-q.y);
   growT = 0;                       // a new field grows in from sizeFrom
 }
