@@ -151,14 +151,23 @@ nobody picked. Touching any of those four sliders takes back control and
 stops it; toggling it off leaves the values where they landed, so you can
 `copy json` a combination you like.
 
-The wordmark cycles too. The words expose a colour rather than a hue, so
-wander spins the hue of whatever colour is set and leaves its saturation
-and lightness alone — a red wordmark travels the spectrum at the same
-weight instead of washing out. It wraps rather than bouncing, since 0°
-and 360° are the same colour, and it **glides** where everything else
-steps: the wordmark is one CSS custom property rather than 26 sprites,
-so it can move every frame, and the stepping that keeps the field cheap
-only read as a stutter here. The corner links follow it, and the swatch
+The wordmark doesn't cycle blindly — it **reads what is behind it**. Six
+times a second wander downscales the box the wordmark occupies into a
+24×12 offscreen canvas, averages it, and steers the text toward a
+contrasting colour, easing rather than snapping.
+
+Straight RGB inversion is the obvious approach and it fails: invert a
+mid grey and you get a mid grey. Instead it takes the **complementary
+hue** for colour separation and flips **lightness** to whichever end the
+backdrop is not, for luminance separation. The second half is what keeps
+it legible; the first is what makes it interesting. A pink-lilac field
+gives deep green, a tan one gives blue.
+
+The cost is the readback, not the arithmetic — `getImageData` forces a
+GPU-to-CPU sync. Reading 288 pixels rather than the canvas keeps one
+probe at **0.73ms**, and at 6.7Hz that is under half a percent of the
+frame budget: 60fps with wander running, worst frame 21ms against 18
+idle. The corner links follow it, and the swatch
 keeps up, so the colour it stops on is the one you copy.
 
 It steps rather than glides on purpose. Re-colouring continuously cost

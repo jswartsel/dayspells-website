@@ -176,3 +176,12 @@ deep in foliage now extract fine, because nothing severs stems any more.
   network this 403s harmlessly and falls back to a system mono.
 - `photos/` are large JPEGs committed to the repo so the extraction is
   reproducible. If repo size becomes a problem, that's the thing to move.
+
+- **The wordmark's colour is derived from the canvas, not cycled.** During
+  wander a 24×12 downscale of the box behind the wordmark is read back
+  6.7 times a second and the text steers to the complementary hue with
+  lightness flipped to the opposite end. Two things to preserve if this
+  is ever touched: plain RGB inversion does not work (invert mid grey,
+  get mid grey — the lightness flip is what buys legibility), and the
+  readback must stay tiny. `getImageData` forces a GPU-to-CPU sync;
+  288 pixels costs 0.73ms, the full canvas would not be affordable.

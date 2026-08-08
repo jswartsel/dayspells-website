@@ -260,14 +260,9 @@ const MIX = [
   [/^iris-pink/,             'mixPink'],
   [/^blade/,                 'mixGrass']
 ];
-/* The words have a colour swatch and no hue slider, so wander spins the
-   hue of whatever colour is set and leaves its saturation and lightness
-   alone -- a red wordmark cycles through the spectrum at the same weight
-   rather than washing out. Hue wraps here rather than bouncing: it is a
-   cycle, and 0 and 360 are the same colour, so it never doubles back. */
-function hexToHsl(hex){
-  const n = parseInt(String(hex).slice(1), 16);
-  const r = ((n>>16)&255)/255, g = ((n>>8)&255)/255, b = (n&255)/255;
+/* Colour helpers, shared by the wordmark and the contrast probe. */
+function rgbToHsl(r255, g255, b255){
+  const r = r255/255, g = g255/255, b = b255/255;
   const mx = Math.max(r,g,b), mn = Math.min(r,g,b), d = mx-mn;
   const l = (mx+mn)/2;
   let h = 0, s = 0;
@@ -285,6 +280,65 @@ function hslToHex(h, s, l){
                 : h < 240 ? [0,x,c] : h < 300 ? [x,0,c] : [c,0,x];
   const hx = v=>Math.round((v+m)*255).toString(16).padStart(2,'0');
   return '#' + hx(r) + hx(g) + hx(b);
+}
+function hexToHsl(hex){
+  const n = parseInt(String(hex).slice(1), 16);
+  return rgbToHsl((n>>16)&255, (n>>8)&255, n&255);
+}
+/* Shortest way round the circle, so 350 -> 10 goes forwards through 0
+   rather than the long way back through 180. */
+function lerpHue(a, b, t){
+  const d = ((b - a + 540) % 360) - 180;
+  return (a + d*t + 360) % 360;
+}
+
+/* ---------- contrast probe ---------------------------------------- */
+/* What colour should the wordmark be to stand against what is actually
+   behind it? Reading the canvas is the obvious answer and the obvious
+   trap: getImageData forces a GPU-to-CPU readback and stalls the
+   pipeline. So read as little as possible, as rarely as tolerable --
+   downscale only the box the wordmark occupies into a 24x12 offscreen
+   and read that. 288 pixels, six times a second.
+
+   Straight RGB inversion does not work: invert a mid grey and you get a
+   mid grey. Take the complementary hue for colour separation, and flip
+   lightness to whichever end the backdrop is not, for luminance
+   separation. That second half is what makes it legible; the first is
+   what makes it interesting. */
+const PROBE_W = 24, PROBE_H = 12;
+let probe = null, probeG = null;
+
+function sampleBackdrop(){
+  const el = document.querySelector('.mark h1');
+  if(!el || !canvas.width) return null;
+  if(!probe){
+    probe = document.createElement('canvas');
+    probe.width = PROBE_W; probe.height = PROBE_H;
+    probeG = probe.getContext('2d', {willReadFrequently:true});
+  }
+  const r = el.getBoundingClientRect();
+  const pad = 0.3;
+  let x = (r.left - r.width*pad) * DPR,  y = (r.top - r.height*pad) * DPR;
+  let w = r.width * (1 + 2*pad) * DPR,   h = r.height * (1 + 2*pad) * DPR;
+  x = Math.max(0, Math.min(canvas.width  - 1, x));
+  y = Math.max(0, Math.min(canvas.height - 1, y));
+  w = Math.max(1, Math.min(canvas.width  - x, w));
+  h = Math.max(1, Math.min(canvas.height - y, h));
+  probeG.drawImage(canvas, x, y, w, h, 0, 0, PROBE_W, PROBE_H);
+  const d = probeG.getImageData(0, 0, PROBE_W, PROBE_H).data;
+  let R = 0, G = 0, B = 0;
+  for(let i = 0; i < d.length; i += 4){ R += d[i]; G += d[i+1]; B += d[i+2]; }
+  const n = d.length / 4;
+  return [R/n, G/n, B/n];
+}
+
+function contrastHsl(rgb){
+  const [h, s, l] = rgbToHsl(rgb[0], rgb[1], rgb[2]);
+  return [
+    (h + 180) % 360,                                   // opposite hue
+    Math.min(1, Math.max(0.6, s * 1.3 + 0.35)),        // keep it vivid
+    l > 0.5 ? 0.22 : 0.80                              // opposite end of light
+  ];
 }
 
 function applyMark(){
@@ -534,12 +588,13 @@ let wandering = false, plantQueue = 0;
 /* Wordmark hue, carried outside P: the words expose a colour, not a
    hue, so this seeds from whatever colour is set when wander starts
    and writes the result back into P.markColor as it turns. */
-let markH = 0, markS = 0, markL = 0, markT = 0;
-/* Degrees per second. The wordmark is one CSS custom property, not 26
-   sprites, so it can move every frame -- the stepping that keeps the
-   field cheap just read as a stutter here. Same average rate as the
-   6-degrees-every-0.3s it replaces. */
-const MARK_RATE = 20;
+/* Current wordmark colour in HSL, and the contrast target it is
+   easing toward. Held outside P because the words expose a colour,
+   not a hue; the result is written back into P.markColor. */
+let markH = 0, markS = 0, markL = 0, markT = 0, swatchT = 0;
+let tgtH = 0, tgtS = 0, tgtL = 0;
+const PROBE_EVERY = 0.15;   // 6.7Hz. The readback is the cost, not the maths.
+const MARK_EASE   = 2.6;    // how fast the text walks to a new target
 
 function stepWander(dt){
   let needGround = false, needPlants = false;   // not `plants` -- that's the field
@@ -553,12 +608,23 @@ function stepWander(dt){
     P[w.k] = v;
     if(w.ground) needGround = true; else needPlants = true;
   }
-  markH = (markH + MARK_RATE * dt * Math.max(0.05, P.wanderSpeed)) % 360;
+  /* Re-probe on a slow clock; ease toward the answer every frame, so
+     the text glides rather than snapping each time it re-reads. */
+  markT += dt;
+  if(markT >= PROBE_EVERY){
+    markT = 0;
+    const avg = sampleBackdrop();
+    if(avg){ const t = contrastHsl(avg); tgtH = t[0]; tgtS = t[1]; tgtL = t[2]; }
+  }
+  const k = Math.min(1, dt * MARK_EASE);
+  markH = lerpHue(markH, tgtH, k);
+  markS += (tgtS - markS) * k;
+  markL += (tgtL - markL) * k;
   P.markColor = hslToHex(markH, markS, markL);
   document.documentElement.style.setProperty('--mark-color', P.markColor);
-  markT += dt;                       // the swatch does not need 60Hz
-  if(markT >= 0.12){
-    markT = 0;
+  swatchT += dt;                     // the swatch does not need 60Hz
+  if(swatchT >= 0.12){
+    swatchT = 0;
     const mi = inputs.markColor;
     if(mi) mi.el.value = P.markColor;
   }
@@ -585,7 +651,13 @@ function syncWanderInputs(){
 
 function setWander(on){
   wandering = on;
-  if(on){ const hsl = hexToHsl(P.markColor); markH = hsl[0]; markS = hsl[1]; markL = hsl[2]; markT = 0; }
+  if(on){
+    const hsl = hexToHsl(P.markColor);
+    markH = hsl[0]; markS = hsl[1]; markL = hsl[2]; markT = PROBE_EVERY; swatchT = 0;
+    const avg = sampleBackdrop();
+    const t = avg ? contrastHsl(avg) : [markH, markS, markL];
+    tgtH = t[0]; tgtS = t[1]; tgtL = t[2];
+  }
   const b = document.getElementById('tWander');
   if(b) b.setAttribute('aria-pressed', String(on));
   if(!on){ rebakePlants(); rebakeGround(); syncWanderInputs(); }  // land cleanly
