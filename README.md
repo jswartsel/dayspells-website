@@ -131,12 +131,16 @@ stuttering. `density()` in the console reports what's happening.
 
 ## Tuning panel
 
-Two links sit in the top-right corner, set in the wordmark's face and
+Three links sit in the top-right corner, set in the wordmark's face and
 colour so they read as part of the page rather than as chrome:
 
 - **regrow** — resow the field
 - **wander** — drift the colours (toggle)
 - **tweak** — toggle the panel
+
+They stay put while the panel is open, so `tweak` is always there to
+close it again. `c` toggles and `Esc` closes as well, and `#tune` in the
+URL opens it on load. The panel itself is hidden by default.
 
 **Wander** walks the four hue and saturation sliders on their own, each
 bouncing between its bounds on its own interval — hue every 0.25s and
@@ -156,8 +160,9 @@ than after, took that to 11.9ms and removed all per-frame allocation.
 
 > Those figures come from headless Chromium, which has **no GPU** and
 > rasterises in software, so they run heavily pessimistic. On a real GPU
-> the page holds a flat 60fps with wander running, at density 1.3 and
-> size 1.7, with the governor idle. Benchmark canvas work with
+> the page holds a flat 60fps with wander running — measured at density
+> 2.5 (4630 plants) and size 1.7, worst frame 19ms, and still 60fps with
+> `wander speed` pinned at 6x, governor idle. Benchmark canvas work with
 > `headless=False` — see the note in `CLAUDE.md` about a 26x regression
 > that headless reported as an improvement.
 >
@@ -165,10 +170,6 @@ than after, took that to 11.9ms and removed all per-frame allocation.
 > and `fgSat` in `WANDER`: those two re-colour 26 sprites, while the two
 > ground walkers only redo one small tile. Turning **auto-thin** on also
 > protects frame rate, and it is off in the current defaults.
-
-They stay put while the panel is open, so `tweak` is always there to
-close it again. `c` toggles and `Esc` closes as well, and `#tune` in the
-URL opens it on load. The panel itself is hidden by default.
 
 **Alt-click any control to restore its default**, the way Logic does it.
 Works on sliders, colour swatches and the checkbox.
