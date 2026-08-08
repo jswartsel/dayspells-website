@@ -85,6 +85,15 @@ first for what the project is and how to run it.
 - **Grow-in is a draw-time scale.** Sprites are baked at `size end` and
   drawn scaled up from `size start`. Re-baking 26 assets every frame for
   eight seconds would be absurd.
+- **Never re-bake sprites per frame.** Wander was first written to
+  re-colour continuously, which cost 15.4ms of a 16.7ms frame — an order
+  of magnitude more than the synchronous timing suggested (0.47ms/sprite),
+  because canvas allocation and the shadow blur bill after the call
+  returns. The tell was that frame rate did *not* recover when wander was
+  switched off. Fixes: step in discrete jumps a few times a second; cache
+  the contact shadow, which is derived from alpha and so is
+  colour-independent; reuse canvases instead of allocating; and scale
+  before colouring. `ensureBake` allocates, `recolour` does not.
 - **Colour is one 3×3 matrix**, composed from gain+tint, hue and
   saturation and applied in a single pass over the pixels. It is exactly
   the identity at the defaults, so the untouched case costs nothing. Use

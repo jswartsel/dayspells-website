@@ -135,7 +135,33 @@ Two links sit in the top-right corner, set in the wordmark's face and
 colour so they read as part of the page rather than as chrome:
 
 - **regrow** — resow the field
+- **wander** — drift the colours (toggle)
 - **options** — toggle the panel
+
+**Wander** walks the four hue and saturation sliders on their own, each
+bouncing between its bounds on its own interval — hue every 0.25s and
+0.40s, saturation every 0.65s and 0.75s. The intervals are deliberately
+unequal so the four never line up, and the combinations end up somewhere
+nobody picked. Touching any of those four sliders takes back control and
+stops it; toggling it off leaves the values where they landed, so you can
+`copy json` a combination you like.
+
+It steps rather than glides on purpose. Re-colouring continuously cost
+**15.4ms of a 16.7ms frame** — measured, and far more than the synchronous
+timings implied, because allocating canvases and running the shadow blur
+bill long after the call returns. Stepping, plus caching the contact
+shadow (it doesn't depend on colour) and scaling before colouring rather
+than after, took that to 11.9ms and removed all per-frame allocation.
+
+> Those figures come from headless Chromium, which has **no GPU** and
+> rasterises in software — the same caveat as everywhere else in this
+> project, and they run heavily pessimistic. Real-GPU cost was not
+> measurable here. Open `options` while wandering and watch the fps
+> readout on your own machine. If it's heavy, the knob is the `every`
+> values for `fgHue` and `fgSat` in `WANDER`: those two re-colour 26
+> sprites, while the two ground walkers only redo one small tile.
+> Turning **auto-thin** on also protects frame rate, and it is off in the
+> current defaults.
 
 They stay put while the panel is open, so `options` is always there to
 close it again. `c` toggles and `Esc` closes as well, and `#tune` in the

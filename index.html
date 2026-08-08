@@ -81,7 +81,8 @@
     text-shadow:0 1px 2px rgba(26,19,11,.45);
   }
   .tools button:hover{opacity:1}
-  .tools button[aria-expanded="true"]{opacity:1; text-decoration:underline}
+  .tools button[aria-expanded="true"],
+  .tools button[aria-pressed="true"]{opacity:1; text-decoration:underline}
   .tune-close{
     border:0; background:none; color:var(--cream); cursor:pointer;
     font:inherit; font-size:13px; line-height:1; padding:0 1px; opacity:.55;
@@ -138,6 +139,7 @@
 
 <div class="tools">
   <button id="tRegrow" title="resow the field">regrow</button>
+  <button id="tWander" aria-pressed="false" title="drift the colours">wander</button>
   <button id="tOptions" aria-expanded="false" aria-controls="tune">options</button>
 </div>
 <div class="tune" id="tune" hidden>
@@ -223,7 +225,7 @@ const DEFAULTS = {
   fgTint: '#ffffff', fgGain: 1.40, fgHue: 0, fgSat: 0.80,
 
   ground:  0.54,   // linen tile scale. lower = finer weave, more zoomed out
-  density: 1.00,
+  density: 2.50,
 
   /* The field grows in: sprites are baked at size and drawn scaled from
      sizeFrom up to it over grow seconds. Set grow to 0 for none. */
@@ -243,11 +245,11 @@ const DEFAULTS = {
   /* Relative amount of each colour of bloom, and of loose grass. 1.0 is
      "whatever the role weight already said". These multiply the pool, so
      they trade against each other rather than adding plants. */
-  mixPurple: 0.30,
-  mixWhite:  2.00,
+  mixPurple: 0.25,
+  mixWhite:  1.55,
   mixYellow: 0.80,
-  mixPink:   1.45,
-  mixGrass:  1.00,
+  mixPink:   0.65,
+  mixGrass:  0.05,
 
   /* The governor thins the field to hold frame rate. It is why plants
      can vanish a few seconds after load on a big window. Off = draw
@@ -334,54 +336,80 @@ function colourMatrix(hex, gain, hue, sat){
   return m;
 }
 
-/* Alpha is left alone, so cutouts keep their edges. */
-function colourize(img, M){
-  const c = document.createElement('canvas');
-  c.width = img.width; c.height = img.height;
-  const g2 = c.getContext('2d', {willReadFrequently:true});
-  g2.drawImage(img, 0, 0);
-  let flat = true;
-  for(let i=0;i<9;i++) if(Math.abs(M[i]-IDENTITY[i]) > 1e-4){ flat = false; break; }
-  if(flat) return c;
-  const d = g2.getImageData(0, 0, c.width, c.height), px = d.data;
-  for(let i=0;i<px.length;i+=4){
-    const r = px[i], g = px[i+1], b = px[i+2];
-    px[i]   = Math.max(0, Math.min(255, M[0]*r + M[1]*g + M[2]*b));
-    px[i+1] = Math.max(0, Math.min(255, M[3]*r + M[4]*g + M[5]*b));
-    px[i+2] = Math.max(0, Math.min(255, M[6]*r + M[7]*g + M[8]*b));
-  }
-  g2.putImageData(d, 0, 0);
-  return c;
+function isFlat(M){
+  for(let i=0;i<9;i++) if(Math.abs(M[i]-IDENTITY[i]) > 1e-4) return false;
+  return true;
 }
 
-/* Bake each asset once, at the size it will actually be drawn, with
-   its contact shadow composited in. One drawImage per plant per
-   frame, and no resampling a 168px source down to 40px 2000 times. */
-function bakePlant(img, dw, dh){
+/* Apply the matrix to a context in place. Alpha is left alone, so
+   cutouts keep their edges. */
+function applyMatrix(g, w, h, M){
+  if(isFlat(M)) return;
+  const d = g.getImageData(0, 0, w, h), px = d.data;
+  for(let i=0;i<px.length;i+=4){
+    const r = px[i], gg = px[i+1], b = px[i+2];
+    px[i]   = Math.max(0, Math.min(255, M[0]*r + M[1]*gg + M[2]*b));
+    px[i+1] = Math.max(0, Math.min(255, M[3]*r + M[4]*gg + M[5]*b));
+    px[i+2] = Math.max(0, Math.min(255, M[6]*r + M[7]*gg + M[8]*b));
+  }
+  g.putImageData(d, 0, 0);
+}
+
+/* Geometry and the contact shadow, cached per asset. The shadow is the
+   sprite's own alpha filled flat and blurred, so it does not depend on
+   colour at all -- it only has to be rebuilt when the draw size changes.
+   Everything here allocates; nothing here runs on a colour change. */
+function ensureBake(a){
   const q  = Math.min(2.2, (devicePixelRatio||1)*1.2);
+  const sc = SHRINK * P.size;
+  const dw = a.w*sc, dh = a.h*sc;
   const mw = Math.max(2, Math.round(dw*q)), mh = Math.max(2, Math.round(dh*q));
-  const P2 = Math.max(3, Math.round(4*q));
+  if(a.mw === mw && a.mh === mh) return;          // geometry unchanged
+
+  const pad = Math.max(3, Math.round(4*q));
+  a.mw = mw; a.mh = mh; a.pad = pad;
+  a.body = document.createElement('canvas');
+  a.body.width = mw; a.body.height = mh;
+  a.cv = document.createElement('canvas');
+  a.cv.width = mw + pad*2; a.cv.height = mh + pad*2;
 
   const sil = document.createElement('canvas');
-  sil.width = mw + P2*2; sil.height = mh + P2*2;
+  sil.width = a.cv.width; sil.height = a.cv.height;
   const sg = sil.getContext('2d');
   sg.imageSmoothingQuality = 'high';
-  sg.drawImage(img, P2, P2, mw, mh);
+  sg.drawImage(a.img, pad, pad, mw, mh);
   sg.globalCompositeOperation = 'source-in';
   sg.fillStyle = 'rgba(26,19,11,.34)';
   sg.fillRect(0, 0, sil.width, sil.height);
 
-  const out = document.createElement('canvas');
-  out.width = sil.width; out.height = sil.height;
-  const g = out.getContext('2d');
-  g.imageSmoothingQuality = 'high';
-  try { g.filter = 'blur(' + (3*q).toFixed(1) + 'px)'; } catch(e){}
-  g.drawImage(sil, 1.6*q, 2.2*q);
-  try { g.filter = 'none'; } catch(e){}
-  g.drawImage(img, P2, P2, mw, mh);
+  a.shadow = document.createElement('canvas');
+  a.shadow.width = sil.width; a.shadow.height = sil.height;
+  const hg = a.shadow.getContext('2d');
+  try { hg.filter = 'blur(' + (3*q).toFixed(1) + 'px)'; } catch(e){}
+  hg.drawImage(sil, 1.6*q, 2.2*q);
 
-  const pd = P2*dw/mw;                       // pad, in display px
-  return {cv:out, pd, w: dw + pd*2, h: dh + pd*2};
+  const pd = pad*dw/mw;                            // pad, in display px
+  a.dw = dw; a.dh = dh; a.stem = a.stemSrc*sc;
+  a.pd = pd; a.cw = dw + pd*2; a.ch = dh + pd*2;
+  a.dx = -dw/2 - pd; a.dy = -dh - a.stem - pd;
+}
+
+/* The colour path, and the only thing wander runs. No allocation, no
+   blur, and the source is scaled down BEFORE the matrix is applied --
+   the same commute the ground uses, and it cuts the per-pixel work by
+   about four. */
+function recolour(a, M){
+  ensureBake(a);
+  const bg = a.body.getContext('2d', {willReadFrequently:true});
+  bg.clearRect(0, 0, a.mw, a.mh);
+  bg.imageSmoothingQuality = 'high';
+  bg.drawImage(a.img, 0, 0, a.mw, a.mh);
+  applyMatrix(bg, a.mw, a.mh, M);
+
+  const g = a.cv.getContext('2d');
+  g.clearRect(0, 0, a.cv.width, a.cv.height);
+  g.drawImage(a.shadow, 0, 0);
+  g.drawImage(a.body, a.pad, a.pad);
 }
 
 let ASSETS = [], linenImg = null, linenPat = null;
@@ -389,31 +417,131 @@ let ASSETS = [], linenImg = null, linenPat = null;
 /* ASSETS objects are created once and mutated in place, so a colour or
    size change re-bakes the sprites without disturbing the field the
    plants are already standing in. */
+function plantMatrix(){ return colourMatrix(P.fgTint, P.fgGain, P.fgHue, P.fgSat); }
+
 function rebakePlants(){
-  const M = colourMatrix(P.fgTint, P.fgGain, P.fgHue, P.fgSat);
-  ASSETS.forEach(a=>{
-    const sc = SHRINK * P.size;
-    const dw = a.w*sc, dh = a.h*sc;
-    const b  = bakePlant(colourize(a.img, M), dw, dh);
-    a.dw = dw; a.dh = dh; a.stem = a.stemSrc*sc;
-    a.cv = b.cv; a.pd = b.pd; a.cw = b.w; a.ch = b.h;
-    a.dx = -dw/2 - b.pd; a.dy = -dh - a.stem - b.pd;
-  });
+  const M = plantMatrix();
+  ASSETS.forEach(a=>recolour(a, M));
 }
 
-/* Tinted and pre-scaled to an integer tile, so repeating never seams.
-   P.ground below 1 shrinks the weave -- the panel is shot close, and at
-   1:1 the linen reads as burlap rather than as ground seen from above. */
+/* Wander re-colours continuously, and re-baking all 26 sprites costs
+   ~12ms -- most of a frame. So spread it: a few sprites per frame,
+   round-robin, and the whole set refreshes in about a sixth of a second.
+   The colour moves slowly enough that the skew between the first sprite
+   and the last is invisible. */
+let bakeCursor = 0;
+function rebakeSome(n){
+  if(!ASSETS.length) return;
+  const M = plantMatrix();
+  for(let i=0;i<n;i++){
+    recolour(ASSETS[bakeCursor % ASSETS.length], M);
+    bakeCursor++;
+  }
+}
+
+/* Pre-scaled to an integer tile, so repeating never seams. P.ground
+   below 1 shrinks the weave -- the panel is shot close, and at 1:1 the
+   linen reads as burlap rather than as ground seen from above.
+   Scale FIRST, then colour: the matrix is linear and downscaling is a
+   weighted average, so the two commute except where a channel clips,
+   and doing it in this order works on ~76k pixels instead of 262k. That
+   took the tile from 7.1ms to about 2, which is what makes it cheap
+   enough to re-colour several times a second while wandering. */
 function rebakeGround(){
   if(!linenImg) return;
-  const t = colourize(linenImg, colourMatrix(P.bgTint, P.bgGain, P.bgHue, P.bgSat));
-  const s = Math.max(24, Math.round(t.width * P.ground));
+  const s = Math.max(24, Math.round(linenImg.width * P.ground));
   const c = document.createElement('canvas');
   c.width = s; c.height = s;
-  const g = c.getContext('2d');
+  const g = c.getContext('2d', {willReadFrequently:true});
   g.imageSmoothingQuality = 'high';
-  g.drawImage(t, 0, 0, s, s);
+  g.drawImage(linenImg, 0, 0, s, s);
+
+  const M = colourMatrix(P.bgTint, P.bgGain, P.bgHue, P.bgSat);
+  let flat = true;
+  for(let i=0;i<9;i++) if(Math.abs(M[i]-IDENTITY[i]) > 1e-4){ flat = false; break; }
+  if(!flat){
+    const d = g.getImageData(0, 0, s, s), px = d.data;
+    for(let i=0;i<px.length;i+=4){
+      const r = px[i], gg = px[i+1], b = px[i+2];
+      px[i]   = Math.max(0, Math.min(255, M[0]*r + M[1]*gg + M[2]*b));
+      px[i+1] = Math.max(0, Math.min(255, M[3]*r + M[4]*gg + M[5]*b));
+      px[i+2] = Math.max(0, Math.min(255, M[6]*r + M[7]*gg + M[8]*b));
+    }
+    g.putImageData(d, 0, 0);
+  }
   linenPat = ctx.createPattern(c, 'repeat');
+}
+
+/* ---------- wander ------------------------------------------------ */
+/* Four slow oscillators on the hue and saturation of ground and plants.
+   The periods are primes and deliberately unequal, so the four never
+   line up again in any useful timeframe -- 43x59x71x89 seconds is a
+   beat period of about four months. That is the point: the combinations
+   drift somewhere neither of us would have chosen. */
+/* Stepped, not continuous. Re-colouring every frame costs 15.4ms of a
+   16.7ms budget -- measured, and far more than the 1.4ms the synchronous
+   timings suggested, because allocating canvases and running the shadow
+   blur bills long after the call returns. Stepping in discrete jumps a
+   few times a second gets the same drifting-colour effect for a fraction
+   of the work, and the steps read as deliberate rather than janky.
+
+   Each walker bounces between its bounds on its own interval. The
+   intervals are deliberately unequal and share no common factor worth
+   speaking of, so the four never line up and the combinations go
+   somewhere neither of us would have picked. Hue steps fastest; the
+   saturations crawl. The two that drive the plants are the slow ones on
+   purpose -- the ground is a single small tile to re-colour (~2ms), the
+   plants are 26 sprites. */
+const WANDER = [
+  {k:'bgHue', step:5,    every:0.25, lo:0,    hi:360,  dir: 1, t:0, ground:1},
+  {k:'fgHue', step:5,    every:0.40, lo:0,    hi:360,  dir:-1, t:0, ground:0},
+  {k:'bgSat', step:0.06, every:0.65, lo:0.05, hi:1.70, dir: 1, t:0, ground:1},
+  {k:'fgSat', step:0.05, every:0.75, lo:0.20, hi:1.90, dir:-1, t:0, ground:0}
+];
+/* If wander ever feels heavy on a given machine, these two intervals are
+   the knob: fgHue and fgSat are the ones that re-colour 26 sprites,
+   bgHue and bgSat only redo one small tile. Doubling them halves the
+   cost and barely changes how the drift reads. */
+let wandering = false, plantQueue = 0;
+
+function stepWander(dt){
+  let needGround = false, needPlants = false;   // not `plants` -- that's the field
+  for(const w of WANDER){
+    w.t += dt;
+    if(w.t < w.every) continue;
+    w.t = 0;
+    let v = P[w.k] + w.dir*w.step;
+    if(v >= w.hi){ v = w.hi; w.dir = -1; }
+    else if(v <= w.lo){ v = w.lo; w.dir = 1; }
+    P[w.k] = v;
+    if(w.ground) needGround = true; else needPlants = true;
+  }
+  if(needGround) rebakeGround();
+  if(needPlants) plantQueue = ASSETS.length;   // spread the re-bake over frames
+  if(plantQueue > 0){
+    const n = Math.min(2, plantQueue);
+    rebakeSome(n);
+    plantQueue -= n;
+  }
+  if(needGround || needPlants) syncWanderInputs();
+}
+
+/* The sliders should be seen to move -- that is half the appeal. Ten
+   times a second is plenty and keeps the DOM writes off the hot path. */
+function syncWanderInputs(){
+  for(const w of WANDER){
+    const i = inputs[w.k];
+    if(!i) continue;
+    i.el.value = P[w.k];
+    if(i.out) i.out.textContent = (+P[w.k]).toFixed(w.k.endsWith('Hue') ? 0 : 2);
+  }
+}
+
+function setWander(on){
+  wandering = on;
+  const b = document.getElementById('tWander');
+  if(b) b.setAttribute('aria-pressed', String(on));
+  if(!on){ rebakePlants(); rebakeGround(); syncWanderInputs(); }  // land cleanly
 }
 
 async function boot(){
@@ -718,6 +846,8 @@ function frame(now){
   growT += dt;
   const gz = growth();
 
+  if(wandering) stepWander(dt);
+
   ctx.setTransform(DPR,0,0,DPR,0,0);
   ctx.globalAlpha = 1;
   if(linenPat){ ctx.fillStyle = linenPat; ctx.fillRect(0,0,W,H); }
@@ -902,6 +1032,7 @@ function buildPanel(){
     };
 
     el.addEventListener('input', ()=>{
+      if(wandering && WANDER.some(w=>w.k===k)) setWander(false);
       P[k] = type === 'check' ? (el.checked ? 1 : 0)
            : type === 'color' ? el.value
            : +el.value;
@@ -962,6 +1093,7 @@ function buildPanel(){
   const show = v=>{ panel.hidden = !v; optBtn.setAttribute('aria-expanded', String(v)); };
   document.getElementById('tClose').onclick = ()=>show(false);
   optBtn.onclick = ()=>show(panel.hidden);
+  document.getElementById('tWander').onclick = ()=>setWander(!wandering);
   document.getElementById('tRegrow').onclick = ()=>regrowNow();
   addEventListener('keydown', e=>{
     if(e.key === 'c' && !e.metaKey && !e.ctrlKey && !e.altKey) show(panel.hidden);
