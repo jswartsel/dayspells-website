@@ -131,10 +131,15 @@ stuttering. `density()` in the console reports what's happening.
 
 ## Tuning panel
 
-Hidden by default. Open it with the pulsing beacon in the top-right
-corner, the `c` key, or `#tune` in the URL. Close it with the `×`, `Esc`,
-or `c` again. The beacon hides itself while the panel is open — the panel
-covers that corner, so leaving it there meant no way back out.
+Two links sit in the top-right corner, set in the wordmark's face and
+colour so they read as part of the page rather than as chrome:
+
+- **regrow** — resow the field
+- **options** — toggle the panel
+
+They stay put while the panel is open, so `options` is always there to
+close it again. `c` toggles and `Esc` closes as well, and `#tune` in the
+URL opens it on load. The panel itself is hidden by default.
 
 **Alt-click any control to restore its default**, the way Logic does it.
 Works on sliders, colour swatches and the checkbox.
@@ -144,7 +149,7 @@ Works on sliders, colour swatches and the checkbox.
 | **rustle** | amount, speed, duration, radius |
 | **ground colour** | hue, sat, gain, tint |
 | **plant colour** | hue, sat, gain, tint |
-| **wordmark** | size and colour of the name |
+| **words** | size and colour of the name |
 | **mix** | relative amount of purple, white, yellow, pink, grass |
 | **field** | ground zoom, density |
 | **grow in** | size start, size end, seconds |
@@ -191,7 +196,7 @@ therefore starts out well ahead of white. Measured counts out of ~3200:
 | 0.50 / 1.60 | 284 | 215 |
 | 0.35 / 2.00 | 198 | 273 |
 
-**Wordmark size** also widens the clearing that gets sown around the
+**Words size** also widens the clearing that gets sown around the
 name, so a bigger wordmark doesn't end up sitting in undergrowth. That
 part lives in `seed()`, so it takes a **regrow** to show.
 

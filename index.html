@@ -65,35 +65,30 @@
   .loading[data-done="true"]{opacity:0; pointer-events:none}
 
   /* ---------- tuning panel -------------------------------------- */
-  /* Not part of the site. Hidden until asked for: the beacon, the `c`
-     key, or #tune in the URL. Esc or the x closes it.
-     Beacon rather than a dot -- it was easy to miss at 18px, and once
-     the panel opened it sat underneath it with no way back out. */
-  .tune-open{
-    position:fixed; top:12px; right:12px; z-index:7; width:26px; height:26px;
-    border:0; border-radius:50%; cursor:pointer; padding:0;
-    background:rgba(26,19,11,.34);
-    animation:beacon 3s ease-out infinite;
-    transition:background .2s;
+  /* Two plain links in the corner, set in the wordmark's face and colour
+     so they read as part of the page rather than as chrome. They sit
+     above the panel and stay put while it is open, so 'options' is
+     always there to close it again. */
+  .tools{
+    position:fixed; top:11px; right:14px; z-index:9;
+    display:flex; gap:14px; align-items:baseline;
   }
-  .tune-open::after{
-    content:""; position:absolute; inset:8px; border-radius:50%;
-    background:var(--flare); opacity:.9;
+  .tools button{
+    border:0; background:none; padding:0; cursor:pointer;
+    font-family:inherit; font-weight:700; font-size:11px;
+    text-transform:lowercase; letter-spacing:.14em;
+    color:var(--mark-color); opacity:.62; transition:opacity .18s;
   }
-  .tune-open:hover{background:rgba(26,19,11,.66)}
-  @keyframes beacon{
-    0%  {box-shadow:0 0 0 0    rgba(244,69,31,.42)}
-    70% {box-shadow:0 0 0 15px rgba(244,69,31,0)}
-    100%{box-shadow:0 0 0 0    rgba(244,69,31,0)}
-  }
+  .tools button:hover{opacity:1}
+  .tools button[aria-expanded="true"]{opacity:1; text-decoration:underline}
   .tune-close{
     border:0; background:none; color:var(--cream); cursor:pointer;
     font:inherit; font-size:13px; line-height:1; padding:0 1px; opacity:.55;
   }
   .tune-close:hover{opacity:1}
   .tune{
-    position:fixed; top:8px; right:8px; z-index:8; width:178px;
-    max-height:calc(100vh - 16px); overflow-y:auto;
+    position:fixed; top:34px; right:8px; z-index:8; width:178px;
+    max-height:calc(100vh - 42px); overflow-y:auto;
     padding:8px 10px 10px; border-radius:3px;
     background:rgba(20,15,9,.82); color:var(--cream);
     font-size:9px; letter-spacing:.04em; line-height:1.35;
@@ -131,10 +126,7 @@
   .tune button:hover{background:rgba(243,223,185,.2)}
   .tune .note{margin:6px 0 0; opacity:.4; line-height:1.35}
 
-  @media (prefers-reduced-motion: reduce){
-    .mark .caret{animation:none}
-    .tune-open{animation:none; background:rgba(26,19,11,.6)}
-  }
+  @media (prefers-reduced-motion: reduce){ .mark .caret{animation:none} }
 </style>
 </head>
 <body>
@@ -143,12 +135,14 @@
 <p class="hint" id="hint">move through the field</p>
 <div class="loading" id="loading">threading</div>
 
-<button class="tune-open" id="tuneOpen" title="tuning (c)" aria-label="tuning"></button>
+<div class="tools">
+  <button id="tRegrow" title="resow the field">regrow</button>
+  <button id="tOptions" aria-expanded="false" aria-controls="tune">options</button>
+</div>
 <div class="tune" id="tune" hidden>
   <h2>customize spell<button class="tune-close" id="tClose" aria-label="close">&times;</button></h2>
   <div id="tuneBody"></div>
   <div class="row">
-    <button id="tRegrow">regrow</button>
     <button id="tCopy">copy json</button>
     <button id="tReset">reset</button>
   </div>
@@ -234,9 +228,9 @@ const DEFAULTS = {
      sizeFrom up to it over grow seconds. Set grow to 0 for none. */
   sizeFrom: 0.40,
   size:     1.70,
-  grow:     5.0,
+  grow:     8.0,
 
-  /* The wordmark. markSize also widens the clearing sown around it, so
+  /* The words. markSize also widens the clearing sown around them, so
      the name does not end up sitting in undergrowth -- that part is in
      seed(), so it needs a regrow. */
   markSize:  1.30,
@@ -796,7 +790,7 @@ const CONTROLS = [
   {k:'fgSat',   l:'sat',   min:0, max:2.5, step:0.02, cost:'plants'},
   {k:'fgGain',  l:'gain',  min:0.2, max:2, step:0.01, cost:'plants'},
   {k:'fgTint',  l:'tint',  type:'color', cost:'plants'},
-  {grp:'wordmark'},
+  {grp:'words'},
   {k:'markSize',  l:'size',  min:0.3, max:3, step:0.02, cost:'mark'},
   {k:'markColor', l:'colour', type:'color', cost:'mark'},
   {grp:'mix'},
@@ -919,7 +913,6 @@ function buildPanel(){
     requestAnimationFrame(statTick);
   })();
 
-  document.getElementById('tRegrow').onclick = ()=>seed();
   document.getElementById('tReset').onclick  = ()=>{
     Object.assign(P, DEFAULTS); syncPanel(); applyMark(); rebakePlants(); rebakeGround(); seed();
   };
@@ -937,13 +930,13 @@ function buildPanel(){
     setTimeout(()=>{ note.textContent = 'density needs a regrow.'; }, 4000);
   };
 
-  /* The panel sits on top of the beacon, so opening it used to leave no
-     way back out with the mouse. Hide the beacon and give the panel its
-     own close button. */
-  const openBtn = document.getElementById('tuneOpen');
-  const show = v=>{ panel.hidden = !v; openBtn.style.display = v ? 'none' : ''; };
+  /* The corner links sit above the panel and never move, so options
+     is always there to close it again. */
+  const optBtn = document.getElementById('tOptions');
+  const show = v=>{ panel.hidden = !v; optBtn.setAttribute('aria-expanded', String(v)); };
   document.getElementById('tClose').onclick = ()=>show(false);
-  document.getElementById('tuneOpen').onclick = ()=>show(panel.hidden);
+  optBtn.onclick = ()=>show(panel.hidden);
+  document.getElementById('tRegrow').onclick = ()=>seed();
   addEventListener('keydown', e=>{
     if(e.key === 'c' && !e.metaKey && !e.ctrlKey && !e.altKey) show(panel.hidden);
     if(e.key === 'Escape') show(false);
