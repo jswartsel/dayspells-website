@@ -209,17 +209,17 @@ const DEFAULTS = {
   /* Hue is the one-slider mood control: it rotates every colour at once
      and keeps the relationships between them, so the wool still reads as
      wool at 200 degrees round. Saturation runs from grey to lurid. */
-  bgTint: '#ffffff', bgGain: 1.00, bgHue: 0, bgSat: 1.00,
-  fgTint: '#ffffff', fgGain: 1.40, fgHue: 0, fgSat: 0.80,
+  bgTint: '#ffffff', bgGain: 1.22, bgHue: 0, bgSat: 0.60,
+  fgTint: '#ffffff', fgGain: 1.35, fgHue: 0, fgSat: 0.80,
 
-  ground:  0.54,   // linen tile scale. lower = finer weave, more zoomed out
+  ground:  0.34,   // linen tile scale. lower = finer weave, more zoomed out
   density: 2.50,
 
   /* The field grows in: sprites are baked at size and drawn scaled from
      sizeFrom up to it over grow seconds. Set grow to 0 for none. */
-  sizeFrom: 0.40,
+  sizeFrom: 0.20,
   size:     1.70,
-  grow:     8.0,
+  grow:     6.0,
 
   /* The words. markSize also widens the clearing sown around them, so
      the name does not end up sitting in undergrowth -- but that part is
@@ -240,7 +240,7 @@ const DEFAULTS = {
   mixWhite:  1.55,
   mixYellow: 0.80,
   mixPink:   0.65,
-  mixGrass:  0.05,
+  mixGrass:  0.55,
 
   /* The governor thins the field to hold frame rate. It is why plants
      can vanish a few seconds after load on a big window. Off = draw
@@ -767,6 +767,25 @@ function seed(){
      from the top, and left full below. Only the wordmark gets a zone --
      the corner links sit in the field like everything else. */
   const ZONE_TOP = 0.75;
+
+  /* The corner links get a bare patch rather than a grass one: nothing
+     is sown there at all, so the linen shows through. Two of its four
+     edges run off the screen, so it reads as a cleared corner rather
+     than a rectangle cut out of the middle of a meadow. */
+  const tools = document.querySelector('.tools');
+  let toolBox = null;
+  if(tools){
+    const r = tools.getBoundingClientRect();
+    const m = Math.max(44, r.height * 1.8);
+    const ex = (r.width + 2*m) * 0.075;
+    toolBox = {x0: r.left - m - ex, y0: r.top - m,
+               x1: r.right + m + ex, y1: r.bottom + m};
+  }
+  function bare(x, y){
+    return !!toolBox && x >= toolBox.x0 && x <= toolBox.x1
+                     && y >= toolBox.y0 && y <= toolBox.y1;
+  }
+
   function grassOnly(x, y){
     const dy = y - H*0.5;
     const ryE = (dy < 0 ? ZONE_TOP : 1) * ry * ZONE_Y;
@@ -849,6 +868,7 @@ function seed(){
        Re-picking the lead after the fact is fine -- colonies only ever
        influenced WHERE a cluster lands, never what it is. Chosen from
        the unweighted blade list so the grass mix cannot thin these out. */
+    if(bare(cx, cy - meanRise)) continue;
     if(grassOnly(cx, cy - meanRise)){
       if(!blades.length) continue;
       asGrass = true; set = blades; lead = pick(blades);
@@ -871,7 +891,9 @@ function seed(){
          plant is anchored at the ground and drawn upward, so one rooted
          below the zone can still push a bloom into it. Must come after
          sc, which it needs to know how tall this plant draws. */
-      if(!asGrass && grassOnly(x, y - rise(a, sc))) continue;
+      const vy = y - rise(a, sc);
+      if(bare(x, vy)) continue;                 // nothing at all in the corner
+      if(!asGrass && grassOnly(x, vy)) continue;
       /* Rank is shared by a head and its own stem, so thinning never
          leaves a flower floating over nothing -- but NOT shared across
          the cluster, or the governor would drop whole clumps at once
@@ -886,7 +908,8 @@ function seed(){
         /* Stems are the tallest things in the field, so one paired to
            a head that cleared the zone can still reach into it. */
         const st = pick(stems), ss = sc*rnd(0.82,1.06);
-        if(!grassOnly(x, y - rise(st, ss)))
+        const sy = y - rise(st, ss);
+        if(!bare(x, sy) && !grassOnly(x, sy))
           place(st, x + rnd(-3,3), y - 0.5, ss, rank, true);
       }
     }

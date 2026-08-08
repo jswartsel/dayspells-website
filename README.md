@@ -131,8 +131,12 @@ stuttering. `density()` in the console reports what's happening.
 
 ## Grass zones
 
-The wordmark sits in a patch where **only grass is sown** — no blooms, no stems, and at full grass weight
-regardless of what the `mix` sliders say. Type reads badly over a bed
+The wordmark sits in a patch where **only grass is sown**, and the
+corner links sit in one where **nothing is sown at all** — bare linen.
+For the wordmark, — that means no blooms, no stems, and full grass weight
+regardless of what the `mix` sliders say. For the links it means exactly
+nothing: two of that box's four edges run off the screen, so it reads as
+a cleared corner rather than a rectangle cut out of a meadow. Type reads badly over a bed
 of flowers: too much colour and too much silhouette exactly where the
 eye is trying to resolve letterforms. It is not a hole in the field, it
 is a different planting.
