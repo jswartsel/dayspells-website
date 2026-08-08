@@ -151,6 +151,13 @@ nobody picked. Touching any of those four sliders takes back control and
 stops it; toggling it off leaves the values where they landed, so you can
 `copy json` a combination you like.
 
+The wordmark cycles too. The words expose a colour rather than a hue, so
+wander spins the hue of whatever colour is set and leaves its saturation
+and lightness alone — a red wordmark travels the spectrum at the same
+weight instead of washing out. It wraps rather than bouncing, since 0°
+and 360° are the same colour. The corner links follow it, and the swatch
+keeps up, so the colour it stops on is the one you copy.
+
 It steps rather than glides on purpose. Re-colouring continuously cost
 **15.4ms of a 16.7ms frame** — measured, and far more than the synchronous
 timings implied, because allocating canvases and running the shadow blur

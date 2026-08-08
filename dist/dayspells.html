@@ -271,6 +271,33 @@ const MIX = [
   [/^iris-pink/,             'mixPink'],
   [/^blade/,                 'mixGrass']
 ];
+/* The words have a colour swatch and no hue slider, so wander spins the
+   hue of whatever colour is set and leaves its saturation and lightness
+   alone -- a red wordmark cycles through the spectrum at the same weight
+   rather than washing out. Hue wraps here rather than bouncing: it is a
+   cycle, and 0 and 360 are the same colour, so it never doubles back. */
+function hexToHsl(hex){
+  const n = parseInt(String(hex).slice(1), 16);
+  const r = ((n>>16)&255)/255, g = ((n>>8)&255)/255, b = (n&255)/255;
+  const mx = Math.max(r,g,b), mn = Math.min(r,g,b), d = mx-mn;
+  const l = (mx+mn)/2;
+  let h = 0, s = 0;
+  if(d){
+    s = l > 0.5 ? d/(2-mx-mn) : d/(mx+mn);
+    h = mx === r ? ((g-b)/d + (g<b ? 6 : 0)) : mx === g ? (b-r)/d + 2 : (r-g)/d + 4;
+    h *= 60;
+  }
+  return [h, s, l];
+}
+function hslToHex(h, s, l){
+  h = ((h % 360) + 360) % 360;
+  const c = (1 - Math.abs(2*l - 1)) * s, x = c * (1 - Math.abs((h/60) % 2 - 1)), m = l - c/2;
+  const [r,g,b] = h < 60  ? [c,x,0] : h < 120 ? [x,c,0] : h < 180 ? [0,c,x]
+                : h < 240 ? [0,x,c] : h < 300 ? [x,0,c] : [c,0,x];
+  const hx = v=>Math.round((v+m)*255).toString(16).padStart(2,'0');
+  return '#' + hx(r) + hx(g) + hx(b);
+}
+
 function applyMark(){
   const r = document.documentElement.style;
   r.setProperty('--mark-scale', P.markSize);
@@ -515,6 +542,11 @@ const WANDER = [
    bgHue and bgSat only redo one small tile. Doubling them halves the
    cost and barely changes how the drift reads. */
 let wandering = false, plantQueue = 0;
+/* Wordmark hue, carried outside P: the words expose a colour, not a
+   hue, so this seeds from whatever colour is set when wander starts
+   and writes the result back into P.markColor as it turns. */
+let markH = 0, markS = 0, markL = 0, markT = 0;
+const MARK_STEP = 6, MARK_EVERY = 0.30;
 
 function stepWander(dt){
   let needGround = false, needPlants = false;   // not `plants` -- that's the field
@@ -527,6 +559,15 @@ function stepWander(dt){
     else if(v <= w.lo){ v = w.lo; w.dir = 1; }
     P[w.k] = v;
     if(w.ground) needGround = true; else needPlants = true;
+  }
+  markT += dt;
+  if(markT >= MARK_EVERY / Math.max(0.05, P.wanderSpeed)){
+    markT = 0;
+    markH = (markH + MARK_STEP) % 360;
+    P.markColor = hslToHex(markH, markS, markL);
+    applyMark();
+    const mi = inputs.markColor;
+    if(mi) mi.el.value = P.markColor;
   }
   if(needGround) rebakeGround();
   if(needPlants) plantQueue = ASSETS.length;   // spread the re-bake over frames
@@ -551,6 +592,7 @@ function syncWanderInputs(){
 
 function setWander(on){
   wandering = on;
+  if(on){ const hsl = hexToHsl(P.markColor); markH = hsl[0]; markS = hsl[1]; markL = hsl[2]; markT = 0; }
   const b = document.getElementById('tWander');
   if(b) b.setAttribute('aria-pressed', String(on));
   if(!on){ rebakePlants(); rebakeGround(); syncWanderInputs(); }  // land cleanly
