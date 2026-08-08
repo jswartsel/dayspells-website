@@ -83,11 +83,6 @@
   .tools button:hover{text-decoration:underline}   /* opacity is 1 now */
   .tools button[aria-expanded="true"],
   .tools button[aria-pressed="true"]{opacity:1; text-decoration:underline}
-  .tune-close{
-    border:0; background:none; color:var(--cream); cursor:pointer;
-    font:inherit; font-size:13px; line-height:1; padding:0 1px; opacity:.55;
-  }
-  .tune-close:hover{opacity:1}
   .tune{
     position:fixed; top:44px; right:8px; z-index:8; width:178px;
     max-height:calc(100vh - 52px); overflow-y:auto;
@@ -99,11 +94,6 @@
   .tune[hidden]{display:none}
   .tune::-webkit-scrollbar{width:5px}
   .tune::-webkit-scrollbar-thumb{background:rgba(243,223,185,.2)}
-  .tune h2{
-    display:flex; justify-content:space-between; align-items:center;
-    margin:0 0 6px; font-size:8px; letter-spacing:.2em;
-    text-transform:uppercase; opacity:.5;
-  }
   .tune .grp{margin:7px 0 0; padding-top:5px; border-top:1px solid rgba(243,223,185,.13)}
   .tune .grp:first-child{border-top:0; padding-top:0; margin-top:0}
   .tune .grp i{display:block; font-style:normal; opacity:.42; letter-spacing:.16em; margin-bottom:3px}
@@ -143,7 +133,6 @@
   <button id="tOptions" aria-expanded="false" aria-controls="tune">tweak</button>
 </div>
 <div class="tune" id="tune" hidden>
-  <h2>customize spell<button class="tune-close" id="tClose" aria-label="close">&times;</button></h2>
   <div id="tuneBody"></div>
   <div class="row">
     <button id="tCopy">copy json</button>
@@ -534,8 +523,8 @@ function rebakeGround(){
 const WANDER = [
   {k:'bgHue', step:5,    every:0.25, lo:0,    hi:360,  dir: 1, t:0, ground:1},
   {k:'fgHue', step:5,    every:0.40, lo:0,    hi:360,  dir:-1, t:0, ground:0},
-  {k:'bgSat', step:0.06, every:0.65, lo:0.05, hi:1.70, dir: 1, t:0, ground:1},
-  {k:'fgSat', step:0.05, every:0.75, lo:0.20, hi:1.90, dir:-1, t:0, ground:0}
+  {k:'bgSat', step:0.06, every:0.65, lo:0,    hi:2.5,  dir: 1, t:0, ground:1},
+  {k:'fgSat', step:0.05, every:0.75, lo:0,    hi:2.5,  dir:-1, t:0, ground:0}
 ];
 /* If wander ever feels heavy on a given machine, these two intervals are
    the knob: fgHue and fgSat are the ones that re-colour 26 sprites,
@@ -1061,7 +1050,18 @@ function syncPanel(){
   });
 }
 
+/* Wander travels the full range of the slider it drives. Reading the
+   bounds off CONTROLS rather than repeating them means widening a
+   slider widens the wander with it. */
+function syncWanderBounds(){
+  for(const w of WANDER){
+    const c = CONTROLS.find(x=>x.k === w.k);
+    if(c && typeof c.min === 'number'){ w.lo = c.min; w.hi = c.max; }
+  }
+}
+
 function buildPanel(){
+  syncWanderBounds();
   const body = document.getElementById('tuneBody');
   let group = body;
   CONTROLS.forEach(c=>{
@@ -1163,7 +1163,6 @@ function buildPanel(){
      is always there to close it again. */
   const optBtn = document.getElementById('tOptions');
   const show = v=>{ panel.hidden = !v; optBtn.setAttribute('aria-expanded', String(v)); };
-  document.getElementById('tClose').onclick = ()=>show(false);
   optBtn.onclick = ()=>show(panel.hidden);
   document.getElementById('tWander').onclick = ()=>setWander(!wandering);
   document.getElementById('tRegrow').onclick = ()=>regrowNow();
