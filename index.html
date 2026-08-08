@@ -593,8 +593,9 @@ let wandering = false, plantQueue = 0;
    not a hue; the result is written back into P.markColor. */
 let markH = 0, markS = 0, markL = 0, markT = 0, swatchT = 0;
 let tgtH = 0, tgtS = 0, tgtL = 0;
-const PROBE_EVERY = 0.15;   // 6.7Hz. The readback is the cost, not the maths.
-const MARK_EASE   = 2.6;    // how fast the text walks to a new target
+const PROBE_EVERY = 0.08;   // 12.5Hz. The readback is the cost, not the maths;
+                            // at 0.73ms a probe that is still under 1% of budget.
+const MARK_EASE   = 5.0;    // how fast the text walks to a new target
 
 function stepWander(dt){
   let needGround = false, needPlants = false;   // not `plants` -- that's the field

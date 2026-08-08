@@ -165,9 +165,12 @@ gives deep green, a tan one gives blue.
 
 The cost is the readback, not the arithmetic — `getImageData` forces a
 GPU-to-CPU sync. Reading 288 pixels rather than the canvas keeps one
-probe at **0.73ms**, and at 6.7Hz that is under half a percent of the
-frame budget: 60fps with wander running, worst frame 21ms against 18
-idle. The corner links follow it, and the swatch
+probe at **~0.8ms**; at 12.5Hz that is **1.02% of the frame budget**,
+and the text tracks its target to within 9.6° of hue on average. 60fps
+with wander running, worst frame 21ms against 18 idle.
+
+`PROBE_EVERY` (0.08s) and `MARK_EASE` (5.0) are the two knobs: how often
+it looks, and how hard it chases what it sees. The corner links follow it, and the swatch
 keeps up, so the colour it stops on is the one you copy.
 
 It steps rather than glides on purpose. Re-colouring continuously cost
