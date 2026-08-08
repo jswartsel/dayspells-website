@@ -458,26 +458,27 @@ function rebakeSome(n){
 function rebakeGround(){
   if(!linenImg) return;
   const s = Math.max(24, Math.round(linenImg.width * P.ground));
-  const c = document.createElement('canvas');
-  c.width = s; c.height = s;
-  const g = c.getContext('2d', {willReadFrequently:true});
-  g.imageSmoothingQuality = 'high';
-  g.drawImage(linenImg, 0, 0, s, s);
 
-  const M = colourMatrix(P.bgTint, P.bgGain, P.bgHue, P.bgSat);
-  let flat = true;
-  for(let i=0;i<9;i++) if(Math.abs(M[i]-IDENTITY[i]) > 1e-4){ flat = false; break; }
-  if(!flat){
-    const d = g.getImageData(0, 0, s, s), px = d.data;
-    for(let i=0;i<px.length;i+=4){
-      const r = px[i], gg = px[i+1], b = px[i+2];
-      px[i]   = Math.max(0, Math.min(255, M[0]*r + M[1]*gg + M[2]*b));
-      px[i+1] = Math.max(0, Math.min(255, M[3]*r + M[4]*gg + M[5]*b));
-      px[i+2] = Math.max(0, Math.min(255, M[6]*r + M[7]*gg + M[8]*b));
-    }
-    g.putImageData(d, 0, 0);
-  }
-  linenPat = ctx.createPattern(c, 'repeat');
+  /* Scratch. willReadFrequently pins a canvas to CPU memory, which is
+     right for something we getImageData out of -- and wrong for anything
+     drawn from afterwards. */
+  const src = document.createElement('canvas');
+  src.width = s; src.height = s;
+  const sg = src.getContext('2d', {willReadFrequently:true});
+  sg.imageSmoothingQuality = 'high';
+  sg.drawImage(linenImg, 0, 0, s, s);
+  applyMatrix(sg, s, s, colourMatrix(P.bgTint, P.bgGain, P.bgHue, P.bgSat));
+
+  /* The pattern source must NOT carry that flag. This pattern fills the
+     whole canvas on every single frame, and a CPU-backed source drags
+     that fill off the GPU path -- which a software rasteriser cannot
+     show you, because it has no GPU path to fall off. That is how this
+     got past a headless benchmark and made the page unusable on a real
+     machine. Copy into a clean canvas and pattern from that. */
+  const tile = document.createElement('canvas');
+  tile.width = s; tile.height = s;
+  tile.getContext('2d').drawImage(src, 0, 0);
+  linenPat = ctx.createPattern(tile, 'repeat');
 }
 
 /* ---------- wander ------------------------------------------------ */

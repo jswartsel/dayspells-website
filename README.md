@@ -154,14 +154,16 @@ shadow (it doesn't depend on colour) and scaling before colouring rather
 than after, took that to 11.9ms and removed all per-frame allocation.
 
 > Those figures come from headless Chromium, which has **no GPU** and
-> rasterises in software — the same caveat as everywhere else in this
-> project, and they run heavily pessimistic. Real-GPU cost was not
-> measurable here. Open `options` while wandering and watch the fps
-> readout on your own machine. If it's heavy, the knob is the `every`
-> values for `fgHue` and `fgSat` in `WANDER`: those two re-colour 26
-> sprites, while the two ground walkers only redo one small tile.
-> Turning **auto-thin** on also protects frame rate, and it is off in the
-> current defaults.
+> rasterises in software, so they run heavily pessimistic. On a real GPU
+> the page holds a flat 60fps with wander running, at density 1.3 and
+> size 1.7, with the governor idle. Benchmark canvas work with
+> `headless=False` — see the note in `CLAUDE.md` about a 26x regression
+> that headless reported as an improvement.
+>
+> If it ever does get heavy, the knob is the `every` values for `fgHue`
+> and `fgSat` in `WANDER`: those two re-colour 26 sprites, while the two
+> ground walkers only redo one small tile. Turning **auto-thin** on also
+> protects frame rate, and it is off in the current defaults.
 
 They stay put while the panel is open, so `options` is always there to
 close it again. `c` toggles and `Esc` closes as well, and `#tune` in the

@@ -85,6 +85,24 @@ first for what the project is and how to run it.
 - **Grow-in is a draw-time scale.** Sprites are baked at `size end` and
   drawn scaled up from `size start`. Re-baking 26 assets every frame for
   eight seconds would be absurd.
+- **`willReadFrequently: true` pins a canvas to CPU memory.** That is
+  correct for a scratch surface you `getImageData` out of, and ruinous
+  for anything drawn from afterwards. Setting it on the canvas behind
+  `createPattern` — a pattern that fills the whole canvas every frame —
+  took the page from **60fps to 2.3fps**, a 26x regression, with a worst
+  frame of 454ms. Do the pixel work on a scratch canvas, copy into a
+  clean one, and pattern from that. The same care applies to any sprite
+  that ends up as a per-frame draw source.
+- **Benchmark canvas performance with `headless=False`.** Headless
+  Chromium has no GPU and rasterises in software, so it cannot see a
+  change that knocks the page off the GPU path — it has no GPU path to
+  fall off. It did worse than fail to catch the regression above: it
+  reported the broken build as **21% faster** than the good one, and an
+  A/B at identical settings agreed. Every conclusion in this file that
+  rests on a software measurement is a statement about software
+  rasterising, not about the machine anyone will use. `playwright
+  chromium.launch(headless=False)` uses the real GPU and took ten
+  seconds to settle a question two headless runs had got backwards.
 - **The frame is destination-pixel bound, not source-pixel bound.**
   Measured: physics is 3.3ms of a 130ms frame (2.5%); the ground fill and
   the vignette are a few ms each; halving the plant count doubles the
@@ -95,12 +113,16 @@ first for what the project is and how to run it.
   the loop. Lowering the payload's image resolution only helps if the
   flowers get smaller with it; raise `size` to compensate and you are
   back where you started, just blurrier.
-- **Overdraw is the number to watch.** At size 1.7 / density 2.5 / DPR
-  1.5 the field asks for 21.2 Mpx of alpha-blended sprite fill per frame
-  against a 2.92 Mpx canvas — **7.3x overdraw**. size 1.3 takes it to
-  5.3x, size 1.0 to 4.0x. Density is the weaker lever than it looks,
-  because the crowding grid absorbs some of it: 2.5 -> 1.5 drops 38% of
-  the plants but only 16% of the pixels.
+- **Overdraw is the number to watch, but the GPU has plenty of headroom.**
+  At size 1.7 / density 2.5 / DPR 1.5 the field asks for 21.2 Mpx of
+  alpha-blended sprite fill per frame against a 2.92 Mpx canvas — 7.3x
+  overdraw; size 1.3 gives 5.3x, size 1.0 gives 4.0x. Density is a weaker
+  lever than it looks, because the crowding grid absorbs some of it:
+  2.5 -> 1.5 drops 38% of the plants but only 16% of the pixels. But note
+  that on a real GPU the page holds a flat 60fps at density 1.3 / size
+  1.7 — about 6x overdraw — with wander running and the governor idle. It
+  was never the overdraw that made the page choke; it was the CPU-pinned
+  pattern above. Reach for the settings only after checking on a GPU.
 - **Never re-bake sprites per frame.** Wander was first written to
   re-colour continuously, which cost 15.4ms of a 16.7ms frame — an order
   of magnitude more than the synchronous timing suggested (0.47ms/sprite),
