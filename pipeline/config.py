@@ -120,7 +120,7 @@ KEEP = [
     ('blade-d',       'stem',   168,  0),
     ('blade-f',       'stem',   190,  0),
     # --- single blades, for tufts. Scattered at a density independent of
-    # both the stems and the flowers -- see WEIGHT in src/index.html.
+    # both the stems and the flowers -- see WEIGHT in index.html.
     # Sized 20% under the stems so a loose blade reads as undergrowth
     # rather than as another plant.
     ('blade-e',       'grass',  120,  0),

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Dev server. Serves the repo root so src/index.html can fetch ../assets/.
+"""Dev server. Serves the repo root, where index.html lives.
 
-    python tools/serve.py        ->  http://localhost:8000/src/
+    python tools/serve.py        ->  http://localhost:8000/
 """
 import http.server, socketserver, os, functools, sys
 
@@ -19,7 +19,7 @@ if __name__ == '__main__':
     handler = functools.partial(NoCache, directory=ROOT)
     socketserver.TCPServer.allow_reuse_address = True
     with socketserver.TCPServer(('', PORT), handler) as httpd:
-        print(f'serving {ROOT}\n  ->  http://localhost:{PORT}/src/')
+        print(f'serving {ROOT}\n  ->  http://localhost:{PORT}/')
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:

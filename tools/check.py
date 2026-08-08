@@ -16,7 +16,7 @@ governor doing its job, not a bug.
 import sys, os
 import numpy as np
 
-URL = os.environ.get('DAYSPELLS_URL', 'http://localhost:8000/src/')
+URL = os.environ.get('DAYSPELLS_URL', 'http://localhost:8000/')
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WORK = os.path.join(ROOT, 'work')
 os.makedirs(WORK, exist_ok=True)

@@ -18,11 +18,11 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
 python pipeline/build.py     # assets -> assets/payload.json + dist/dayspells.html
-python tools/serve.py        # -> http://localhost:8000/src/
+python tools/serve.py        # -> http://localhost:8000/
 ```
 
 `assets/` is committed, so you do **not** need to run the extraction to
-work on the site. Edit `src/index.html` and reload — the page fetches
+work on the site. Edit `index.html` and reload — the page fetches
 `assets/payload.json` at runtime. Re-run `build.py` only when the assets
 or `pipeline/config.py` change.
 
@@ -63,7 +63,7 @@ pipeline/
                   keepers. Nothing in here is hand-located.
   extract.py      photos -> isolated transparent PNGs
   build.py        PNGs -> payload.json -> single-file dist
-src/index.html    the page. One file: markup, style, and the field engine
+index.html        the page. One file: markup, style, and the field engine
 assets/           extracted cutouts (committed) + generated payload
 dist/             self-contained build, opens from file://
 tools/            dev server, headless checks
@@ -211,5 +211,5 @@ plants to hold frame rate — if the field looks like it is losing patches
 a few seconds after load, that is what is doing it. Turn it off to draw
 everything sown, whatever it costs.
 
-Keys worth tuning live at the top of their sections in `src/index.html`:
+Keys worth tuning live at the top of their sections in `index.html`:
 `SHRINK`, `WEIGHT`, `BRUSH`, `FORCE`, and the sowing target inside `seed()`.

@@ -17,7 +17,7 @@ sys.path.insert(0, HERE)
 import config as C
 
 ASSETS = os.path.join(ROOT, 'assets')
-SRC    = os.path.join(ROOT, 'src', 'index.html')
+SRC    = os.path.join(ROOT, 'index.html')
 DIST   = os.path.join(ROOT, 'dist', 'dayspells.html')
 
 
@@ -58,7 +58,7 @@ def main():
     # every character" and shredded the template. Hence the assertions.
     src = open(SRC).read()
     slot = '<script id="payload" type="application/json"></script>'
-    assert src.count(slot) == 1, 'payload slot missing or duplicated in src/index.html'
+    assert src.count(slot) == 1, 'payload slot missing or duplicated in index.html'
     doc = src.replace(slot, '<script id="payload" type="application/json">'
                       + json.dumps(payload) + '</script>')
     blocks = re.findall(r'<script>\n(.*?)\n</script>', doc, re.S)

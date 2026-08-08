@@ -192,7 +192,7 @@ async function loadData(){
   const el = document.getElementById('payload');
   const inline = el.textContent.trim();
   if(inline) return JSON.parse(inline);
-  const res = await fetch('../assets/payload.json');
+  const res = await fetch('assets/payload.json');
   if(!res.ok) throw new Error('assets/payload.json missing -- run: python pipeline/build.py');
   return res.json();
 }
