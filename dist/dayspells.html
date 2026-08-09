@@ -884,8 +884,16 @@ function setWander(on){
     const t = avg ? contrastHsl(avg) : [markH, markS, markL];
     tgtH = t[0]; tgtS = t[1]; tgtL = t[2];
   }
+  /* The label names what the click will do, not what is happening -- so
+     it reads "rest" while the colours are drifting. The row is anchored
+     by its right edge, so the shorter word shrinks it leftward and
+     regrow/tweak stay put rather than jumping. */
   const b = document.getElementById('tWander');
-  if(b) b.setAttribute('aria-pressed', String(on));
+  if(b){
+    b.setAttribute('aria-pressed', String(on));
+    b.textContent = on ? 'rest' : 'wander';
+    b.title = on ? 'stop the drift' : 'drift the colors';
+  }
   if(!on){ rebakePlants(); rebakeGround(); syncWanderInputs(); breatheHome(); }  // land cleanly
 }
 

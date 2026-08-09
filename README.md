@@ -231,7 +231,10 @@ every extra blade is refused.
 Three links sit in the top-right corner, set in the wordmark's face and
 colour so they read as part of the page rather than as chrome:
 
-- **wander** — drift the colors (toggle)
+- **wander** — drift the colors. Reads **rest** while it is running: the
+  label names what the click will do, not what is happening. The row is
+  anchored by its right edge, so the shorter word shrinks it leftward and
+  `regrow` / `tweak` stay put.
 - **regrow** — resow the field
 - **tweak** — toggle the panel
 
