@@ -168,7 +168,7 @@ by cluster. A density governor (`autothin`) exists but is **off**.
 
 ### wander
 Four hue/sat walkers on unequal intervals, stepped rather than
-continuous: `every` 0.25 / 0.40 (hues) and 1.083 / 1.000 (sats), divided
+continuous: `every` 0.0833 / 0.1333 (hues) and 1.083 / 1.000 (sats), divided
 by `wander speed`. The two saturations were slowed on purpose — ground
 sat to 0.60 of the rate it ran at, plant sat to 0.75 — via `every`, not
 `step`, because `every` is the rate term `wanderSpeed` already divides.
@@ -240,17 +240,25 @@ is already past the ~1.2 where the clamp starts eating `bgHue`.
   wide to 1440.
 - **Zone purity.** 100% grass in every grass zone, empty in every bare
   zone, across all pages at laptop / phone / landscape-phone.
-- **Wander is not wall-clock deterministic.** See `GAME.md` §1 — the
-  step accumulator resets rather than subtracting, so the period depends
-  on frame rate. Walker cycles at `wanderSpeed 2`: ground hue 18s, ground
-  sat 45.5s, plant hue 28.8s, plant sat 50.0s; full state still repeats
-  every **~3.8 days**. (A comment in the file claiming "four months" is
-  stale.) The two saturations were deliberately slowed — see §5.
-- **The accumulator reset costs a few percent of the nominal rate.**
-  Measured A/B at 60.1fps: slowing ground sat to a nominal 0.60 of its
-  rate landed at 0.581, and plant sat to a nominal 0.75 landed at 0.756.
-  Step periods quantise to whole frames, so nominal and measured never
-  quite agree, and the gap moves with frame rate.
+- **Wander is close to wall-clock deterministic now.** The step
+  accumulator subtracts rather than resetting (`GAME.md` §1 — this was
+  fixed, and the clamp beside it is load-bearing). Measured at
+  `wanderSpeed 2` / 60.1fps, all four walkers run within **0.8%** of
+  nominal, where ground hue used to be 6.7% slow. What still diverges
+  from wall time is deliberate: `dt` is clamped to 1/30, and a
+  backgrounded tab throttles rAF.
+- **Walker cycles at `wanderSpeed 2`:** ground hue 18s, ground sat 45.5s,
+  plant hue 28.8s, plant sat 50.0s; full state repeats every **~3.8
+  days**. The hue cycles are unchanged by the granularity change — step
+  and interval were both divided by 3, so only the grain moved. (A
+  comment in the file claiming "four months" is stale.)
+- **Hue granularity is free; only the ground pays.** `plantQueue` resets
+  rather than accumulating and drains at a flat 2 sprites/frame, so it
+  was already saturated — stepping 3x as often changes the plant work
+  per frame not at all. Ground re-bake is 0.94ms and now runs 3x as
+  often, 0.12ms/frame amortised becoming 0.31ms. Measured 60.1fps before
+  and after; at `wanderSpeed 6`, where the ground-hue threshold is
+  shorter than a frame, still 60.1fps and worst frame 19.8ms.
 
 ---
 

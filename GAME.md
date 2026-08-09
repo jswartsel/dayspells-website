@@ -18,8 +18,8 @@ Four walkers, each with a value, a direction, and bounds it bounces off:
 
 ```js
 const WANDER = [
-  {k:'bgHue', step:5,    every:0.25, lo:0, hi:360, dir: 1},
-  {k:'fgHue', step:5,    every:0.40, lo:0, hi:360, dir:-1},
+  {k:'bgHue', step:5/3,  every:0.25/3, lo:0, hi:360, dir: 1},
+  {k:'fgHue', step:5/3,  every:0.40/3, lo:0, hi:360, dir:-1},
   {k:'bgSat', step:0.06, every:1.083, lo:0, hi:2.5, dir: 1},
   {k:'fgSat', step:0.05, every:1.000, lo:0, hi:2.5, dir:-1}
 ];
@@ -29,41 +29,59 @@ Given a step count, each walker's value is exactly determined. Four step
 counts are a complete description of the wander state. Nothing random
 enters it.
 
-### The clock is not
+### The clock now mostly is — this has been fixed
+
+It used to read `w.t = 0`, which threw away the remainder instead of
+subtracting the threshold, so a walker's real period was not
+`every / speed` but *"the first frame on which accumulated dt crossed the
+threshold"* — rounded up to a whole frame. At 60fps the 0.125s
+ground-hue walker actually fired every 0.133s, 6.7% slow.
+
+That rounding is a fixed number of milliseconds, so it costs a bigger
+*share* of a short interval than a long one. Thirding the hue intervals
+for granularity walked straight into it: ground hue went from 8 frames
+(6.7% slow) to 3 frames (20% slow), losing 12.5% of its drift rate for
+nothing. So the one-line fix got made:
+
 ```js
+const thr = w.every / Math.max(0.05, P.wanderSpeed);
 w.t += dt;
-if(w.t < w.every / P.wanderSpeed) continue;
-w.t = 0;              // <- discards the overshoot
+if(w.t < thr) continue;
+w.t -= thr;                  // carry the remainder, do not discard it
+if(w.t > thr) w.t = thr;     // but never bank more than one step
 ```
 
-`w.t = 0` throws away the remainder instead of subtracting the threshold.
-So a walker's real period is not `every / speed`, it is *"the first frame
-on which accumulated dt crossed the threshold"* — which depends on frame
-rate and on every individual hitch.
+The clamp is not optional. `dt` is capped at `1/30`, so on a page running
+slower than one frame per threshold the remainder would grow without
+bound and the walker would fire every frame forever, then sprint once the
+page recovered. Measured at `wanderSpeed 6`, where the ground-hue
+threshold (13.9ms) is shorter than a frame: `w.t` parks at exactly `thr`
+and stays there, 60.1fps, worst frame 19.8ms.
 
-At 60fps the 0.125s ground-hue walker actually fires every **0.133s**,
-6.7% slow. At 120fps it is exact. One GC pause shifts the phase
-permanently. Two further sources of divergence:
+Measured at `wanderSpeed 2` / 60.1fps, all four walkers now run within
+**0.8%** of nominal — ground hue exactly on 0.0417s against a nominal
+0.0417s, where before it was 6.7% slow.
 
-- `dt` is clamped to `1/30`, so a page running at 20fps advances wander
-  **slower than wall clock**.
-- A backgrounded tab has rAF throttled, so wander nearly freezes.
+**Two sources of divergence remain**, and they are deliberate:
 
-**Consequence:** replay for three hours and you see the same *sequence*,
-at different *times*. Order is fixed; the clock is not.
+- `dt` is clamped to `1/30`, so a page running below 30fps still advances
+  wander slower than wall clock.
+- A backgrounded tab has rAF throttled, so wander nearly freezes — which
+  is the *wanted* behaviour for a clock that should count watched time
+  (see §2).
 
-**The fix is one line** — `w.t -= threshold` instead of `w.t = 0`. That
-makes it frame-rate independent, and it is the prerequisite for any
-timecode being meaningful.
+So the remaining gap between wander-time and wall-time is now only where
+the page was not being drawn, which is exactly the semantics a timecode
+would want anyway.
 
 ### The actual periods
 At the default `wanderSpeed 2`:
 
 | walker | steps per full cycle | wall time |
 |---|---|---|
-| ground hue | 144 | 18.0s |
+| ground hue | 432 | 18.0s |
 | ground sat | 84 | 45.5s |
-| plant hue | 144 | 28.8s |
+| plant hue | 432 | 28.8s |
 | plant sat | 100 | 50.0s |
 
 LCM ≈ **3.8 days** before the exact four-value state repeats (7.6 days at
@@ -76,7 +94,7 @@ anyone will sit through, and a real number worth putting on the page.
 > The comment in `index.html` claiming a beat period of "about four
 > months" from primes `43×59×71×89` refers to intervals that are not in
 > the code any more. It is stale — the real intervals are
-> 0.25 / 0.40 / 1.083 / 1.000.
+> 0.0833 / 0.1333 / 1.083 / 1.000.
 
 ---
 
@@ -199,8 +217,10 @@ mood instead of competing with it.
 
 ## 5. If this were ever pursued, in order
 
-1. Fix the accumulator (`w.t -= threshold`). One line, and everything
-   else depends on it.
+1. ~~Fix the accumulator (`w.t -= threshold`).~~ **Done** — see §1. It
+   was not done for this; it was forced by thirding the hue intervals,
+   which made the rounding cost 12.5% of ground hue's rate. Everything
+   below still depends on it, and it is no longer in the way.
 2. Refactor the walkers to pure functions of a `wanderClock`. Verify a
    given clock value reproduces a given look exactly, twice.
 3. Show the number. Persist it in `localStorage`. Ship nothing else —

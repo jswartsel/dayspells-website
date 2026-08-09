@@ -311,8 +311,8 @@ answer to space themselves, and handling it twice would toggle twice and
 land back where it started.
 
 **Wander** walks the four hue and saturation sliders on their own, each
-bouncing between its bounds on its own interval — hue every 0.25s and
-0.40s, saturation every 1.083s and 1.000s, all divided by `wander speed`
+bouncing between its bounds on its own interval — hue every 0.0833s and
+0.1333s, saturation every 1.083s and 1.000s, all divided by `wander speed`
 (2.0 by default, so twice that pace). The intervals are deliberately
 unequal so the four never line up, and the combinations end up somewhere
 nobody picked. Touching any of those four sliders takes back control and

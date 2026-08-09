@@ -821,11 +821,24 @@ function rebakeGround(){
    apart within seconds and never re-acquire. If the reset is ever
    fixed (see GAME.md), nudge this to 1.01 and the coincidence goes
    away at a cost of 1% on the rate. */
+/* The hues are written as `original / 3` on BOTH terms on purpose: that
+   is the whole shape of the granularity change. Thirding `step` alone
+   would have been three times slower rather than three times finer;
+   thirding `every` with it holds the drift rate exactly where it was and
+   only cuts the size of each jump. It costs nothing measurable, and the
+   reason is worth knowing -- `plantQueue` RESETS to ASSETS.length on
+   every plant step rather than accumulating, and it is drained at a
+   flat 2 sprites a frame, so it was already saturated at the old rate.
+   Stepping three times as often resets an already-full queue more
+   often and changes the work done per frame not at all. Only the ground
+   pays, and it pays 0.94ms three times as often -- 0.12ms/frame
+   amortised becoming 0.31ms. Measured: 60.1fps before and after, worst
+   frame 27ms before and 25.3ms after. */
 const WANDER = [
-  {k:'bgHue', step:5,    every:0.25,  lo:0,   hi:360,  dir: 1, t:0, ground:1},
-  {k:'fgHue', step:5,    every:0.40,  lo:0,   hi:360,  dir:-1, t:0, ground:0},
-  {k:'bgSat', step:0.06, every:1.083, lo:0,   hi:2.5,  dir: 1, t:0, ground:1},
-  {k:'fgSat', step:0.05, every:1.000, lo:0,   hi:2.5,  dir:-1, t:0, ground:0}
+  {k:'bgHue', step:5/3,  every:0.25/3, lo:0,  hi:360,  dir: 1, t:0, ground:1},
+  {k:'fgHue', step:5/3,  every:0.40/3, lo:0,  hi:360,  dir:-1, t:0, ground:0},
+  {k:'bgSat', step:0.06, every:1.083,  lo:0,  hi:2.5,  dir: 1, t:0, ground:1},
+  {k:'fgSat', step:0.05, every:1.000,  lo:0,  hi:2.5,  dir:-1, t:0, ground:0}
 ];
 /* If wander ever feels heavy on a given machine, these two intervals are
    the knob: fgHue and fgSat are the ones that re-colour 26 sprites,
@@ -847,9 +860,29 @@ const MARK_EASE   = 5.0;    // how fast the text walks to a new target
 function stepWander(dt){
   let needGround = false, needPlants = false;   // not `plants` -- that's the field
   for(const w of WANDER){
+    const thr = w.every / Math.max(0.05, P.wanderSpeed);
     w.t += dt;
-    if(w.t < w.every / Math.max(0.05, P.wanderSpeed)) continue;
-    w.t = 0;
+    if(w.t < thr) continue;
+    /* SUBTRACT the threshold, do not reset to 0. Resetting discards the
+       overshoot, so a walker's real period is not `thr` -- it is the
+       first frame on which the accumulated dt crossed thr, rounded up to
+       a whole frame. That rounding is a fixed number of milliseconds, so
+       it costs a bigger SHARE of a short interval than a long one, and
+       thirding the hue intervals walked straight into it: at
+       wanderSpeed 2 ground hue went from 8 frames (6.7% slow) to 3
+       frames (20% slow), losing 12.5% of its drift rate for no reason
+       anybody asked for. Subtracting carries the remainder forward and
+       the rate comes out right whatever the frame rate.
+
+       The clamp is the other half. dt is capped at 1/30, so on a page
+       running slower than one frame per threshold the remainder would
+       grow without bound and the walker would fire every frame forever,
+       sprinting once the page recovered. Banking at most one step of
+       credit keeps it honest. (This is the fix GAME.md calls the
+       prerequisite for a wander timecode -- it is here early because
+       the finer intervals needed it, not because that got built.) */
+    w.t -= thr;
+    if(w.t > thr) w.t = thr;
     let v = P[w.k] + w.dir*w.step;
     if(v >= w.hi){ v = w.hi; w.dir = -1; }
     else if(v <= w.lo){ v = w.lo; w.dir = 1; }

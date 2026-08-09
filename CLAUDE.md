@@ -251,6 +251,34 @@ first for what the project is and how to run it.
   the contact shadow, which is derived from alpha and so is
   colour-independent; reuse canvases instead of allocating; and scale
   before colouring. `ensureBake` allocates, `recolour` does not.
+- **The wander accumulator subtracts, and the clamp beside it is
+  load-bearing.** It used to read `w.t = 0`, which discarded the
+  overshoot, so a walker's period was really "the first frame past the
+  threshold" -- rounded up to a whole frame. That rounding is a fixed
+  number of milliseconds, so it costs a bigger *share* of a short
+  interval than a long one, and thirding the hue intervals for
+  granularity walked into it: ground hue went 8 frames (6.7% slow) to 3
+  frames (20% slow), losing 12.5% of its rate. Now `w.t -= thr`, and all
+  four walkers measure within 0.8% of nominal. **Do not drop the
+  `if(w.t > thr) w.t = thr`** -- `dt` is capped at 1/30, so on a page
+  slower than one frame per threshold the remainder grows without bound
+  and the walker fires every frame forever, then sprints when the page
+  recovers. Verified at `wanderSpeed 6`, where the ground-hue threshold
+  is 13.9ms against a 16.7ms frame: `w.t` parks at exactly `thr`, 60.1fps,
+  worst frame 19.8ms.
+- **Hue granularity was free, and the reason is `plantQueue`.** It RESETS
+  to `ASSETS.length` on every plant step rather than accumulating, and
+  `rebakeSome` drains it at a flat 2 sprites a frame off a rolling
+  `bakeCursor`. So it was already saturated at the old rate -- stepping
+  three times as often resets an already-full queue and changes the work
+  done per frame not at all. Only the ground pays, 0.94ms three times as
+  often. If anyone ever makes the drain rate track the step rate, that
+  stops being true and this gets expensive.
+- **Granularity and rate are separate knobs, and `step` alone is the
+  wrong one.** Thirding `step` by itself is three times *slower*, not
+  three times *finer*. Both terms move together -- `step:5/3` with
+  `every:0.25/3` -- which is why they are written as divisions in the
+  table rather than as decimals.
 - **Colour is one 3×3 matrix**, composed from gain+tint, hue and
   saturation and applied in a single pass over the pixels. It is exactly
   the identity at the defaults, so the untouched case costs nothing. Use
