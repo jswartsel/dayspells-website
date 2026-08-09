@@ -129,17 +129,76 @@ stuttering. `density()` in the console reports what's happening.
 | `density()` | `{quality, sown, drawn}` — governor state |
 | `tune(obj)` | apply a saved tuning JSON; returns the current one |
 
+## Pages
+
+Four pages in one document, routed on the hash so the browser's back
+button works and each can be linked to directly:
+
+| | |
+|---|---|
+| `#home` | the wordmark, and the four links under it |
+| `#listen` | bandcamp · apple music · spotify, in a stack |
+| `#shows` | "stay tuned for upcoming dates" |
+| `#shop` | "coming soon" |
+
+`follow` is not a page — it goes straight out to Instagram. Every
+external link opens in a new tab, so the field is still standing when
+you come back.
+
+Only the active page is in the flow; the rest are `[hidden]`, which is
+what keeps the grass zones honest — a hidden box measures 0×0 and drops
+out of the zone pass on its own. On the sub-pages a `<` appears top left
+at the wordmark's own size. **Changing page resows the field**, which is
+not a side effect to be tolerated but the transition itself: the meadow
+grows in from `sizeFrom` around whatever type has just arrived.
+
+The nav holds **one line in landscape and one link per row in portrait**.
+Landscape needs a cap on the type size to manage it (`min(--type * .54,
+4.2vw)`) — the ratio alone outgrows the window below about 1150px and
+the row wraps 3+1, which reads like an accident.
+
 ## Grass zones
 
-The wordmark sits in a patch where **only grass is sown**, and the
-corner links sit in one where **nothing is sown at all** — bare linen.
-For the wordmark, — that means no blooms, no stems, and full grass weight
-regardless of what the `mix` sliders say. For the links it means exactly
-nothing: two of that box's four edges run off the screen, so it reads as
-a cleared corner rather than a rectangle cut out of a meadow. Type reads badly over a bed
-of flowers: too much colour and too much silhouette exactly where the
-eye is trying to resolve letterforms. It is not a hole in the field, it
-is a different planting.
+Type sits badly on a bed of flowers: too much colour and too much
+silhouette exactly where the eye is trying to resolve letterforms. So
+every piece of type gets a patch where **only grass is sown** — no
+blooms, no stems, and full grass weight regardless of what the `mix`
+sliders say. It is not a hole in the field, it is a different planting.
+The corner links get the other treatment, a **bare** patch where nothing
+is sown at all: two of that box's four edges run off the screen, so it
+reads as a cleared corner rather than a rectangle cut out of a meadow.
+
+There is no longer one clearing at a fixed place. **Every element
+carrying `data-zone` measures its own box and gets its own ellipse** —
+the wordmark, each nav link, each link on the listen page, the back
+caret. That is what makes "one zone per link" cost nothing per page, and
+`markSize` still scales the clearings because it scales the type they
+are measured off.
+
+The pad around the box is **additive in em, not a multiplier**. A
+multiplier gives a two-line paragraph twice the margin of a one-line one
+and a four-letter word a quarter of the wordmark's; `ZONE_PAD_X` 0.18
+and `ZONE_PAD_Y` 0.65 give every piece of type the same margin in its
+own type size, and reproduce the previous hand-tuned wordmark clearing
+to within a pixel. `ZONE_TOP` (0.60) then shortens the pad **above** the
+type so flower heads press closer from that side — the pad, not the
+whole semi-axis, or a two-line paragraph loses its top margin to its own
+extra height.
+
+`data-zone` goes on an **inline span**, not on the block. A block
+stretches to its widest sibling, so an `h1` measured the nav row's width
+and the wordmark got a clearing half the screen wide. An inline box is
+the union of its line boxes: the text and nothing else.
+
+Space between stacked type is sized so **flowers grow between the
+clearings**. Two ellipses stop touching once their centres are further
+apart than the pads facing each other — one line-height plus 1.04em —
+and everything past that is uncleared field. Each gap is therefore
+`proportional term + 48px`, and the constant is the point: a sprite is a
+fixed number of pixels tall whatever the viewport, so a gap in em alone
+leaves 13px of roof on a phone and nothing can grow in it. Measured, the
+band comes out at a flat 48px on every stacked pair from 390px wide to
+1440.
 
 Every zone test is done in **visual space, not anchor space**. A plant
 is rooted at its foot and drawn upward, so testing where it is rooted
@@ -147,19 +206,17 @@ puts the patch a whole plant too high — grass sown along the bottom of
 the zone grows out of the top of it, and blooms rooted below reach in.
 The cluster decision uses the field's average rise (the asset is not
 chosen yet); each plant and each companion stem then uses its own.
-With that, the zones measure 100% grass.
+With that, the zones measure 100% grass across all four pages at both
+laptop and phone size.
 
-The zone is wider than it is tall — `ZONE_X` 1.44 against `ZONE_Y` 1.25
-— because the wordmark is a long word. It is also cut short above the
-type (`ZONE_TOP` 0.75) so flower heads come closer from above, and left
-full below.
-
-The clearing fills only with whatever clusters happen to centre inside
-it, which leaves it thinner than the field around it, so a top-up pass
-brings the clearing to `ZONE_GRASS` (0.84) of its natural density —
-sowing single blades when the target is above 1, thinning at random
-when it is below. Sowing needs a tighter crowding radius, since at the
-default the zone is already packed and every extra blade is refused.
+The clearings fill only with whatever clusters happen to centre inside
+them, so a top-up pass brings them to `ZONE_GRASS` (0.84) of their
+natural density — sowing single blades when the target is above 1,
+thinning at random when it is below. Which zone a blade goes to is
+picked by **area**, or a nav link's small ellipse would get as many
+blades as the wordmark's and end up matted. Sowing needs a tighter
+crowding radius, since at the default the zone is already packed and
+every extra blade is refused.
 
 ## Tuning panel
 
@@ -240,10 +297,9 @@ The eight that queue one: `density`, the five `mix` sliders, `size start`
 and `grow seconds`. The last two only show during the grow-in ramp, which
 has already finished by the time you touch them.
 
-`words size` deliberately does **not**. It scales the clearing sown
-around the name as well as the type, but the type resizes instantly and
-having the field re-scatter underneath it a few seconds later is worse
-than a stale clearing. The clearing catches up on the next regrow.
+Changing **page** resows immediately instead of queueing — the clearings
+belong to the type that is on screen, so a stale one would be a clearing
+around words that are no longer there.
 
 | group | |
 |---|---|
@@ -251,7 +307,6 @@ than a stale clearing. The clearing catches up on the next regrow.
 | **wander** | speed of the colour drift |
 | **ground color** | hue, sat, gain, tint |
 | **plant color** | hue, sat, gain, tint |
-| **words** | size and colour of the name |
 | **mix** | relative amount of purple, white, yellow, pink, grass |
 | **field** | ground zoom, density |
 | **grow in** | size start, size end, seconds |
@@ -298,9 +353,11 @@ therefore starts out well ahead of white. Measured counts out of ~3200:
 | 0.50 / 1.60 | 284 | 215 |
 | 0.35 / 2.00 | 198 | 273 |
 
-**Words size** also widens the clearing that gets sown around the
-name, so a bigger wordmark doesn't end up sitting in undergrowth. That
-part lives in `seed()`, so it takes a **regrow** to show.
+The **words** group is gone from the panel. `markSize` and `markColor`
+still exist in `P` — the first scales the type and, through it, every
+clearing; the second is what wander writes the colour it computes back
+into — they just no longer have controls. Both still travel in
+`copy json`, and `tune({markSize: …})` still works.
 
 **Grow in** ramps the field up from `size start` to `size end` over
 `seconds`, on load and on every regrow. It is a draw-time scale — sprites

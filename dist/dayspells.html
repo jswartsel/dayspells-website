@@ -16,10 +16,19 @@
     --flare:      #f4451f;   /* the original mark colour; starting point */
     --mark-color: #f4451f;   /* wordmark only -- driven by the panel */
     --mark-scale: 1;
+    /* One type scale for the whole site. The wordmark is 1x; everything
+       else is a fraction of it, so markSize still moves all of it at
+       once and the grass zones (measured off the boxes) follow. */
+    --type: calc(clamp(1.5rem,7.2vw,4.2rem) * var(--mark-scale));
+    --track: clamp(.12em,.9vw,.24em);
     --frond-dark: #1a130b;
     --cream:      #f3dfb9;
   }
   *{box-sizing:border-box}
+  /* Author styles beat the UA sheet, so the display rules below would
+     otherwise un-hide the views and the back link. Views are switched by
+     [hidden] and nothing else, so this has to be the last word. */
+  [hidden]{display:none !important}
   html,body{height:100%}
   body{
     margin:0; overflow:hidden;
@@ -31,7 +40,16 @@
   #field{position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none}
 
   .stage{position:fixed; inset:0; display:grid; place-items:center; pointer-events:none; z-index:2}
-  .mark{position:relative; padding:clamp(1rem,4vw,2.2rem) clamp(1.4rem,6vw,3.6rem); text-align:center}
+  /* Only one view is in the DOM flow at a time -- the rest are [hidden],
+     so they measure 0x0 and drop out of the grid and out of the zone
+     pass alike. The margin-bottom rides the block up off dead centre:
+     a centred grid item shifts by half its bottom margin, and type
+     sitting a little above the middle reads better than type on it. */
+  .mark{
+    position:relative; text-align:center;
+    padding:clamp(1rem,4vw,2.2rem) clamp(1.4rem,6vw,3.6rem);
+    margin-bottom:clamp(1.5rem,9vh,5rem);
+  }
   .mark::before{
     content:""; position:absolute; inset:-22%;
     background:radial-gradient(ellipse at center,
@@ -41,13 +59,97 @@
   }
   .mark h1{
     margin:0; font-weight:700; line-height:1; text-transform:lowercase;
-    font-size:calc(clamp(1.5rem,7.2vw,4.2rem) * var(--mark-scale));
-    letter-spacing:clamp(.12em,.9vw,.24em);
-    text-indent:clamp(.12em,.9vw,.24em);
+    font-size:var(--type);
+    letter-spacing:var(--track);
+    text-indent:var(--track);
     color:var(--mark-color);
   }
   .mark .caret{color:var(--iris-deep); opacity:.5; animation:blink 1.35s steps(1,end) infinite}
   @keyframes blink{0%,55%{opacity:.5}56%,100%{opacity:0}}
+
+  /* ---------- navigation ---------------------------------------- */
+  /* Everything that is type shares the wordmark's face, weight, colour
+     and tracking, and differs only in scale. text-indent cancels the
+     trailing letter-space so a centred line is optically centred. */
+  .stage a, .back{
+    pointer-events:auto; display:block; flex:0 0 auto; white-space:nowrap;
+    color:var(--mark-color); text-decoration:none;
+    font-weight:700; line-height:1; text-transform:lowercase;
+    letter-spacing:var(--track); text-indent:var(--track);
+  }
+  .stage a:hover, .back:hover{text-decoration:underline}
+
+  /* ---------- stacking, and the gaps that let flowers through ----- */
+  /* Two clearings stop touching when their centres are further apart
+     than the sum of the pads facing each other: for two blocks that is
+     one line-height plus (ZONE_PAD_Y + ZONE_PAD_Y*ZONE_TOP) = 1.04em.
+     Past that there is uncleared field between them, and that band is
+     where the flowers come through.
+
+     So each gap below is `type-proportional term + 48px`. The constant
+     is the point: a sprite is a fixed number of pixels tall whatever the
+     viewport -- a bloom draws 45-65px on a phone exactly as on a laptop
+     -- so a gap expressed purely in em leaves 13px of roof on a phone
+     and nothing can grow in it. The proportional term cancels the type's
+     own pads; the 48px is the roof itself, and it is the same roof
+     everywhere. All of it is written against --type rather than em,
+     because gap and margin resolve em against their own box (16px), not
+     against the child type they are separating.
+
+     The vh ceilings are the one place the roof gives way. Three links
+     each with 48px of roof do not fit in a 390px-tall landscape phone --
+     "spotify" was clipped off the bottom -- and a clipped link is
+     strictly worse than a narrower band. On anything with room, the
+     absolute term wins and the ceiling never binds. */
+  .nav{
+    margin:min(calc(var(--type) * 1.11 + 48px), 26vh) 0 0;
+    display:flex; flex-wrap:nowrap; justify-content:center;
+    gap:clamp(.8rem,3.4vw,2.4rem);
+  }
+  /* 4pt under where it started. The vw cap is what holds all four on one
+     line in landscape at any width, without wrapping and without
+     overflowing -- the ratio alone outgrows the window below ~1150px. */
+  .nav a{font-size:min(calc(var(--type) * .54), 4.2vw)}
+
+  /* Portrait: one link per row, with the same flower gap between them. */
+  @media (max-aspect-ratio:1/1){
+    .nav{
+      flex-direction:column; align-items:center;
+      gap:calc(var(--type) * .56 + 48px);
+    }
+    .nav a{font-size:calc(var(--type) * .54)}
+  }
+
+  /* The listen stack states the rule directly: gap = 1.04 * type + the
+     48px roof. What gives on a short screen is then the TYPE, not the
+     roof -- cap the gap instead and the three clearings merge back into
+     one column, which is the thing the roof exists to prevent. The
+     ceiling is the size at which the stack still fits: three lines plus
+     two gaps is 5.08 type-heights plus the two roofs, and 180px covers
+     those roofs, the padding and the off-centre nudge. */
+  .stack{
+    --sfs:min(calc(var(--type) * .72), calc((100vh - 180px) / 5.08));
+    list-style:none; margin:0; padding:0;
+    display:flex; flex-direction:column; align-items:center;
+    gap:calc(var(--sfs) * 1.04 + 48px);
+  }
+  .stack a{font-size:var(--sfs)}                /* slightly under the wordmark */
+
+  /* 20ch is a hair over one line of "stay tuned for upcoming dates" cut
+     in half, so it breaks into two even lines instead of running to the
+     window edges. */
+  .say{
+    margin:0; font-weight:700; line-height:1.32; text-transform:lowercase;
+    font-size:calc(var(--type) * .55);
+    letter-spacing:var(--track); text-indent:var(--track);
+    color:var(--mark-color); max-width:20ch;
+  }
+
+  .back{
+    position:fixed; z-index:9;
+    top:clamp(.1rem,1.2vh,.9rem); left:clamp(.5rem,2.2vw,1.5rem);
+    font-size:var(--type); text-indent:0;
+  }
 
   .hint{
     position:fixed; left:50%; transform:translateX(-50%);
@@ -122,7 +224,41 @@
 </head>
 <body>
 <canvas id="field" aria-hidden="true"></canvas>
-<div class="stage"><div class="mark"><h1>dayspells<span class="caret">_</span></h1></div></div>
+<div class="stage">
+  <!-- data-zone marks a box that gets its own grass-only clearing; the
+       number scales it. Hidden views measure 0x0 and are skipped, so the
+       clearings re-shape themselves when the page changes. -->
+  <div class="mark" data-view="home">
+    <!-- data-zone goes on an inline span, not the h1: a block stretches
+         to its widest sibling, so the h1 measured the nav row's width and
+         the wordmark got a clearing half the screen wide. An inline box
+         is the union of its line boxes -- the text and nothing else. -->
+    <h1><span data-zone="1">dayspells<span class="caret">_</span></span></h1>
+    <nav class="nav">
+      <a data-zone="1" href="#listen">listen</a>
+      <a data-zone="1" href="https://www.instagram.com/dayspells" target="_blank" rel="noopener noreferrer">follow</a>
+      <a data-zone="1" href="#shows">shows</a>
+      <a data-zone="1" href="#shop">shop</a>
+    </nav>
+  </div>
+
+  <div class="mark" data-view="listen" hidden>
+    <ul class="stack">
+      <li><a data-zone="1" href="https://dayspells.bandcamp.com/" target="_blank" rel="noopener noreferrer">bandcamp</a></li>
+      <li><a data-zone="1" href="https://music.apple.com/us/artist/dayspells/1722783976" target="_blank" rel="noopener noreferrer">apple music</a></li>
+      <li><a data-zone="1" href="https://open.spotify.com/artist/4VRMA334TNEAriNz0hdn35" target="_blank" rel="noopener noreferrer">spotify</a></li>
+    </ul>
+  </div>
+
+  <div class="mark" data-view="shows" hidden>
+    <p class="say"><span data-zone="1">stay tuned for upcoming dates</span></p>
+  </div>
+
+  <div class="mark" data-view="shop" hidden>
+    <p class="say"><span data-zone="1">coming soon</span></p>
+  </div>
+</div>
+<a class="back" id="back" href="#home" data-zone="0.8" aria-label="back" hidden>&lt;</a>
 <p class="hint" id="hint">move through the field</p>
 <div class="loading" id="loading">threading</div>
 
@@ -308,7 +444,11 @@ const PROBE_W = 24, PROBE_H = 12;
 let probe = null, probeG = null;
 
 function sampleBackdrop(){
-  const el = document.querySelector('.mark h1');
+  /* The visible view, not the wordmark: on the sub-pages there is no h1,
+     and the box that matters is whatever type is standing in the middle.
+     Its own padding already reaches past the letterforms, so the extra
+     margin is smaller here than the 0.3 the bare h1 rect needed. */
+  const el = document.querySelector('[data-view]:not([hidden])');
   if(!el || !canvas.width) return null;
   if(!probe){
     probe = document.createElement('canvas');
@@ -316,7 +456,7 @@ function sampleBackdrop(){
     probeG = probe.getContext('2d', {willReadFrequently:true});
   }
   const r = el.getBoundingClientRect();
-  const pad = 0.3;
+  const pad = 0.08;
   let x = (r.left - r.width*pad) * DPR,  y = (r.top - r.height*pad) * DPR;
   let w = r.width * (1 + 2*pad) * DPR,   h = r.height * (1 + 2*pad) * DPR;
   x = Math.max(0, Math.min(canvas.width  - 1, x));
@@ -677,9 +817,17 @@ async function boot(){
   rebakeGround();
   applyMark();
   buildPanel();
+  showView(viewFromHash(), false);
   loading.dataset.done = 'true';
   resize();
+  booted = true;
   requestAnimationFrame(frame);
+  /* The clearings are measured off the type, so they are only right once
+     the type is set in the right face. Space Mono arrives over the
+     network and the fallback is a different width; without this the
+     first field is sown around a wordmark that is not the one you end up
+     looking at. Resolves immediately when the font is cached or absent. */
+  if(document.fonts && document.fonts.ready) document.fonts.ready.then(()=>seed());
 }
 
 /* ---------- field ------------------------------------------------ */
@@ -750,23 +898,49 @@ function seed(){
      actually means something; the governor is what protects frame rate,
      not this. */
   const target = Math.min(8000, Math.max(260, Math.round(W*H/700*P.density)));
-  /* The clearing sown around the name tracks its size, or a bigger
-     wordmark ends up sitting in undergrowth. */
-  const rx = Math.min(W*0.20, 205)*P.markSize, ry = Math.min(H*0.085, 62)*P.markSize;
 
-  /* Grass-only zones: under the wordmark, and under the corner links.
-     Type sits badly on a bed of flowers -- too much colour and too much
-     silhouette right where the eye needs to resolve letterforms. Inside
-     these, a cluster that would have been blooms is sown as blades
-     instead, at full grass weight regardless of what the mix says. It is
-     not a hole in the field; it is a different planting. */
-  /* Wider than tall: the wordmark is a long word, and the height reads
-     right at 1.25 while the ends were still crowding. */
-  const ZONE_X = 1.44, ZONE_Y = 1.25;
-  /* The clearing is cut short above the type so flower heads come closer
-     from the top, and left full below. Only the wordmark gets a zone --
-     the corner links sit in the field like everything else. */
-  const ZONE_TOP = 0.75;
+  /* Grass-only zones. Type sits badly on a bed of flowers -- too much
+     colour and too much silhouette right where the eye needs to resolve
+     letterforms. Inside a zone, a cluster that would have been blooms is
+     sown as blades instead, at full grass weight regardless of what the
+     mix says. It is not a hole in the field; it is a different planting.
+
+     There is no longer one clearing at a fixed place. Every element
+     carrying data-zone measures its OWN box and gets its own ellipse:
+     the wordmark, each nav link, each link on the listen page, the back
+     caret. Hidden views measure 0x0 and drop out, so switching pages
+     re-shapes the clearings with no per-view constants -- and markSize
+     still scales them, because it scales the type they are measured off.
+
+     The pad is ADDITIVE in em, not a multiplier on the box. That is what
+     makes it transferable: a multiplier gives a two-line paragraph twice
+     the margin of a one-line one, and gives a four-letter word a quarter
+     of the wordmark's. These two numbers reproduce the old hand-tuned
+     wordmark clearing to within a pixel (383x100 against 383x101). */
+  const ZONE_PAD_X = 0.18, ZONE_PAD_Y = 0.65;   // em, added to the half-box
+  /* Each clearing is cut short above its type so flower heads come
+     closer from the top, and left full below. It shortens the PAD, not
+     the whole semi-axis: scale the axis and a two-line paragraph loses
+     its top margin to its own extra height, so "stay tuned for upcoming
+     dates" had 7px of air above it where the wordmark had 31. Applied to
+     the pad, the clearance above type is a flat 0.39em whatever the type
+     is, and the wordmark's clearing comes out within 3px of the value it
+     was hand-tuned to. */
+  const ZONE_TOP = 0.60;
+
+  const zones = [];
+  document.querySelectorAll('[data-zone]').forEach(el=>{
+    const r = el.getBoundingClientRect();
+    if(r.width < 1 || r.height < 1) return;              // hidden view
+    const fs = parseFloat(getComputedStyle(el).fontSize) || 16;
+    const k  = parseFloat(el.dataset.zone) || 1;
+    zones.push({
+      x: r.left + r.width/2,  y: r.top + r.height/2,
+      ax: (r.width/2 + fs*ZONE_PAD_X) * k,
+      ay: (r.height/2 + fs*ZONE_PAD_Y) * k,
+      up: (r.height/2 + fs*ZONE_PAD_Y*ZONE_TOP) * k
+    });
+  });
 
   /* The corner links get a bare patch rather than a grass one: nothing
      is sown there at all, so the linen shows through. Two of its four
@@ -788,9 +962,13 @@ function seed(){
   }
 
   function grassOnly(x, y){
-    const dy = y - H*0.5;
-    const ryE = (dy < 0 ? ZONE_TOP : 1) * ry * ZONE_Y;
-    return Math.hypot((x - W/2)/(rx*ZONE_X), dy/ryE) < 1;
+    for(let i=0;i<zones.length;i++){
+      const z = zones[i];
+      const dy = y - z.y;
+      const ex = (x - z.x)/z.ax, ey = dy/(dy < 0 ? z.up : z.ay);
+      if(ex*ex + ey*ey < 1) return true;
+    }
+    return false;
   }
 
   /* Everything above is in SCREEN space, but a plant is anchored at its
@@ -911,9 +1089,13 @@ function seed(){
         /* Stems are the tallest things in the field, so one paired to
            a head that cleared the zone can still reach into it. */
         const st = pick(stems), ss = sc*rnd(0.82,1.06);
-        const sy = y - rise(st, ss);
-        if(!bare(x, sy) && !grassOnly(x, sy))
-          place(st, x + rnd(-3,3), y - 0.5, ss, rank, true);
+        /* Jitter first, then test. Testing at x and planting at
+           x + rnd(-3,3) let a stem sitting exactly on a zone edge land
+           just inside it -- one stray in ~3300, but more zones means
+           more edge, so it started showing up. */
+        const sx = x + rnd(-3,3), sy = y - 0.5;
+        if(!bare(sx, sy - rise(st, ss)) && !grassOnly(sx, sy - rise(st, ss)))
+          place(st, sx, sy, ss, rank, true);
       }
     }
   }
@@ -922,7 +1104,7 @@ function seed(){
      up with single blades until it carries ZONE_GRASS more than it did.
      A tighter crowding radius is what makes room -- at the default the
      zone is already packed and every extra blade would be refused. */
-  if(blades.length){
+  if(blades.length && zones.length){
     const seen = p => grassOnly(p.x, p.y - rise(p.a, p.s));
     let have = plants.filter(seen).length;
     const want = Math.round(have * ZONE_GRASS);
@@ -938,13 +1120,22 @@ function seed(){
       have = want;
     }
 
+    /* Pick which clearing to sow into by AREA, not uniformly, or a nav
+       link's little ellipse would get as many blades as the wordmark's
+       and end up matted while the wordmark stayed thin. */
+    const areas = zones.map(z=>z.ax*z.ay);
+    const total = areas.reduce((s,v)=>s+v, 0);
+
     let g2 = 0;
     while(have < want && g2++ < want*12){
+      let r = Math.random()*total, zi = 0;
+      while(zi < zones.length-1){ r -= areas[zi]; if(r <= 0) break; zi++; }
+      const z  = zones[zi];
       const a  = pick(blades);
       const th = Math.random()*Math.PI*2, rr = Math.sqrt(Math.random());
       const ux = Math.cos(th)*rr, uy = Math.sin(th)*rr;
-      const vx = W/2 + ux*rx*ZONE_X;
-      const vy = H*0.5 + uy*(uy < 0 ? ZONE_TOP : 1)*ry*ZONE_Y;
+      const vx = z.x + ux*z.ax;
+      const vy = z.y + uy*(uy < 0 ? z.up : z.ay);
       const depth = Math.min(1, Math.max(0, (vy + H*0.14)/(H*1.28)));
       const sc = (0.70 + depth*0.34) * rnd(0.80,1.24);
       if(place(a, vx, vy + rise(a, sc), sc, Math.random(), false, 0.24)) have++;
@@ -955,6 +1146,34 @@ function seed(){
   growT = 0;                       // a new field grows in from sizeFrom
 }
 window.regrow = ()=>seed();
+
+/* ---------- views ------------------------------------------------ */
+/* Four pages in one document. Only the active one is in the flow; the
+   rest are [hidden], which is what keeps the grass zones honest -- a
+   hidden box measures 0x0 and is skipped, so the clearings belong to
+   whatever is actually on screen.
+
+   Routing is on the hash so the browser's own back button works and a
+   page can be linked to directly. Anything unrecognised (including the
+   long-standing #tune) falls through to home. */
+const VIEWS = {home:1, listen:1, shows:1, shop:1};
+let booted = false;
+
+function viewFromHash(){
+  const h = location.hash.replace(/^#\/?/, '');
+  return VIEWS[h] ? h : 'home';
+}
+/* Changing page changes the shape of the clearings, so it has to resow.
+   That is not a side effect to be tolerated -- it is the transition: the
+   field regrows in from sizeFrom around the new type. */
+function showView(name, resow){
+  document.querySelectorAll('[data-view]').forEach(el=>{
+    el.hidden = el.dataset.view !== name;
+  });
+  document.getElementById('back').hidden = name === 'home';
+  if(resow && booted) regrowNow();
+}
+addEventListener('hashchange', ()=>showView(viewFromHash(), true));
 
 function resize(){
   const wasDPR = DPR;
@@ -1166,9 +1385,9 @@ const CONTROLS = [
   {k:'fgSat',   l:'sat',   min:0, max:2.5, step:0.02, cost:'plants'},
   {k:'fgGain',  l:'gain',  min:0.2, max:2, step:0.01, cost:'plants'},
   {k:'fgTint',  l:'tint',  type:'color', cost:'plants'},
-  {grp:'words'},
-  {k:'markSize',  l:'size',  min:0.3, max:3, step:0.02, cost:'mark'},
-  {k:'markColor', l:'color', type:'color', cost:'mark'},
+  /* markSize and markColor still exist in P -- markSize scales the type
+     and its clearings, and wander writes the colour it computes back
+     into markColor -- they just no longer have controls. */
   {grp:'mix'},
   {k:'mixPurple', l:'purple', min:0, max:2, step:0.05, cost:'regrow', rg:1},
   {k:'mixWhite',  l:'white',  min:0, max:2, step:0.05, cost:'regrow', rg:1},

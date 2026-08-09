@@ -52,6 +52,70 @@ first for what the project is and how to run it.
   first, leaving one half still merged, so blooms split at `depth=2`.
   Stems have no second waist to find and recursion just chops them into
   segments, so grass runs one round.
+- **Grass zones are measured off the type, not placed by constants.**
+  Anything carrying `data-zone` contributes an ellipse around its own
+  box, so four nav links and three stacked links cost nothing per page
+  and hidden pages drop out on their own (a `display:none` box measures
+  0×0). Three things had to be right for this to hold up:
+  - **`data-zone` goes on an inline span.** A block stretches to its
+    widest sibling, so the `h1` measured the *nav row's* width and the
+    wordmark got a clearing half the screen wide. An inline box is the
+    union of its line boxes.
+  - **The pad is additive in em, not a multiplier on the box.** A
+    multiplier gives a two-line paragraph twice the margin of a one-line
+    one and a four-letter word a quarter of the wordmark's.
+    `ZONE_PAD_X` 0.18 / `ZONE_PAD_Y` 0.65 reproduce the old hand-tuned
+    wordmark clearing (383×101 against 383×100) while transferring to
+    every other piece of type.
+  - **`ZONE_TOP` shortens the pad, not the semi-axis.** Scaling the axis
+    means a taller block loses its top margin to its own extra height:
+    "stay tuned for upcoming dates" had 7px of air above it where the
+    wordmark had 31. Against the pad it is a flat 0.39em for everything,
+    and `ZONE_TOP` moved 0.75 → 0.60 to keep the wordmark where it was.
+- **Gaps between stacked type carry an absolute term, not just an em
+  one.** Two clearings stop touching once their centres are more than
+  one line-height plus 1.04em apart; past that is field, and that band
+  is where flowers grow between the words. But **a sprite is a fixed
+  number of pixels tall whatever the viewport** — a bloom draws 45-65px
+  on a phone exactly as on a laptop — so a gap in em alone gave 48px of
+  roof on a laptop and 13px on a phone, which nothing can grow in. Every
+  gap is `proportional term + 48px`; measured, the band is a flat 48px
+  on every stacked pair from 390px wide to 1440.
+- **When a short screen can't hold both, the type gives way, not the
+  roof.** Three listen links each with 48px of roof do not fit a 390px-
+  tall landscape phone; capping the *gap* clipped `spotify` off the
+  bottom on one attempt and merged all three clearings into one column
+  on the next, which is the thing the roof exists to prevent. Capping
+  the *type* instead (`--sfs`, with the gap written as
+  `1.04 * --sfs + 48px`) keeps the band at 48px everywhere. The one
+  place still short is the wordmark-to-nav roof on a landscape phone
+  (17px), because the alternative is shrinking the wordmark.
+- **A stray `*/` silently deleted the entire `.nav` rule.** Appending a
+  second comment tail to an already-closed block comment left the CSS
+  parser dropping everything after it: no margin, no flex, four links
+  stacked in a column on a 1440px desktop. It surfaced as a *layout*
+  oddity, not as an error. When a rule seems not to apply, read the
+  computed style (`getComputedStyle`) before touching the values -- that
+  is what showed `margin-top: 0px` against a declaration that was right
+  there in the file.
+- **The nav needs a vw cap to hold one line.** At a plain ratio of the
+  wordmark the four links outgrow the window below ~1150px and wrap 3+1,
+  which reads like an accident. `min(--type * .54, 4.2vw)` holds one row
+  through every landscape size measured; portrait goes to one per row.
+- **Changing page resows.** The clearings belong to the type on screen,
+  so it is the transition rather than a cost — the field grows in from
+  `sizeFrom` around whatever has just arrived. Zone code reads DOM rects,
+  so the view must be swapped *before* `seed()`; `getBoundingClientRect`
+  forces the layout, so calling it straight after the swap is enough.
+- **Seed again on `document.fonts.ready`.** The clearings are measured
+  off the type, so they are only right once the type is in the right
+  face — the fallback is a different width, and without this the first
+  field is sown around a wordmark nobody ends up looking at. This did not
+  matter while the zone was computed from `W`/`H`.
+- **`[hidden]{display:none !important}` is load-bearing.** Author styles
+  beat the UA sheet, so the `display:block` on the link rule un-hid every
+  view and the back caret. Views are switched by `[hidden]` and nothing
+  else.
 - **Colour grade is baked into the assets** (`config.GRADE`), not applied
   as a CSS `filter` on the canvas. A compositor filter over a full-screen
   canvas costs on every frame; this costs nothing.
