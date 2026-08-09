@@ -104,7 +104,7 @@ first for what the project is and how to run it.
   there in the file.
 - **The nav needs a vw cap to hold one line.** At a plain ratio of the
   wordmark the four links outgrow the window below ~1150px and wrap 3+1,
-  which reads like an accident. `min(--type * .48, 3.7vw)` holds one row
+  which reads like an accident. `min(--type * .54, 4.2vw)` holds one row
   through every landscape size measured; portrait goes to one per row.
 - **Changing page resows.** The clearings belong to the type on screen,
   so it is the transition rather than a cost — the field grows in from
@@ -134,21 +134,35 @@ first for what the project is and how to run it.
   waits for the grow-in to finish, since two scale ramps at once fight
   each other. Mean sprite *area* comes out slightly below rest, so there
   is no overdraw cost: 61fps idle, 61fps breathing, headed.
-- **The meadow scales with the type, and the count with its square.**
+- **Scaling the meadow with the type was built, measured, and reverted.**
   A sprite is a fixed number of pixels wherever it is drawn; the type is
   set in vw. So on a phone the field was full desktop size against type
   less than half as tall, and the clearings came out *smaller than a
   single bloom* — a plant was correctly excluded from a zone and still
-  covered the words, because only its centre is tested. Plants now ride
-  the same ramp `--type` does, read off the wordmark so the CSS and the
-  JS cannot drift. The plant target is divided by that scale **squared**:
-  sprite area goes as the square, so without it the field thins into
-  visible linen. Measured at 390×844: scale 0.418, 4806 plants against
-  843, overdraw 7.2x against the laptop's 6.4x. Fill is unchanged but
-  per-plant CPU is 5x — the thing most likely to bite on a real phone.
+  covered the words, because only its centre is tested. The fix that
+  suggests itself is to put the plants on the same ramp `--type` uses and
+  divide the count by that scale squared to hold coverage. Measured at
+  390×844: scale 0.418, blooms 23×25px, 4806 plants against 843, overdraw
+  7.2x against the laptop's 6.4x — proportionally correct at every width.
+  It came out **the wrong look**: many small flowers read as noise where
+  few large ones read as a meadow. It also moved the cost onto the CPU
+  (5x the physics and transforms) on the weakest devices, with `autothin`
+  off. The zone floor below is what carries the fix instead. Do not
+  reach for the rescale again without knowing it was tried — it works,
+  and it was rejected on taste and phone CPU, not correctness.
 - **Zone semi-axes are floored at `half-box + half-bloom`.** The smallest
   ellipse that can actually keep a bloom off the type, given that only
   the centre is tested. Measured off the assets so it tracks `P.size`.
+- **An equal-specificity override must come AFTER what it overrides.**
+  The portrait `.stack` rule sat above the plain `.stack` rule, so it
+  lost on source order and did nothing: the listen links stayed pinned to
+  the landscape vw cap at 16px while the nav was 26px. It survived a
+  check because that check read the first `.nav a, .stack a` match, and
+  the *hidden* nav link comes first in the document — so both pages
+  reported 26px. Two lessons: probe the element that is actually
+  rendered (first with a non-zero rect), and prefer one variable over
+  three copies. Sizes for the nav, the listen links and the sub-page
+  messages drifted apart twice before they were hoisted into `--menu`.
 - **Colour grade is baked into the assets** (`config.GRADE`), not applied
   as a CSS `filter` on the canvas. A compositor filter over a full-screen
   canvas costs on every frame; this costs nothing.

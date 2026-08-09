@@ -21,6 +21,19 @@
        once and the grass zones (measured off the boxes) follow. */
     --type: calc(clamp(1.5rem,7.2vw,4.2rem) * var(--mark-scale));
     --track: clamp(.12em,.9vw,.24em);
+    /* Every piece of type that is not the wordmark is set at --menu: the
+       nav, the listen links, and the sub-pages' messages. Defined once
+       here and overridden once below, so the three can never drift apart
+       -- they did, twice, when each rule carried its own copy. */
+    --menu: min(calc(var(--type) * .54), 4.2vw);
+  }
+  /* Portrait: a px floor instead of the vw cap. --type is a share of the
+     viewport, so on a phone the menu was landing at 20px while the
+     wordmark it is measured against cannot grow (already 72% of the
+     screen width). In landscape the four links have to hold one line and
+     a floor would push the row off the screen, hence the split. */
+  @media (max-aspect-ratio:1/1){
+    :root{ --menu: max(calc(var(--type) * .54), 26px); }
     --frond-dark: #1a130b;
     --cream:      #f3dfb9;
   }
@@ -102,54 +115,60 @@
      strictly worse than a narrower band. On anything with room, the
      absolute term wins and the ceiling never binds. */
   .nav{
-    margin:min(calc(var(--type) * 1.11 + 48px), 26vh) 0 0;
+    /* The roof over the nav has two regimes, because the wordmark's own
+       zone is proportional at laptop sizes but hits the half-bloom floor
+       on a phone, while the nav's is floored at both. max() takes
+       whichever binds; they cross at --type 61px. */
+    margin:min(max(calc(var(--type) * .24 + 127px),
+                   calc(var(--type) * .89 + 88px)), 22vh) 0 0;
     display:flex; flex-wrap:nowrap; justify-content:center;
     gap:clamp(.96rem,4.08vw,2.88rem);   /* 20% over what it was */
   }
-  /* 8pt under where it started. The vw cap is what holds all four on one
-     line in landscape at any width, without wrapping and without
-     overflowing -- the ratio alone outgrows the window below ~1150px.
-     The gaps are deliberately NOT scaled down with it: holding them
-     constant while the words shrink is what opens space between the
-     clearings. */
-  .nav a{font-size:min(calc(var(--type) * .48), 3.7vw)}
+  .nav a{font-size:var(--menu)}
 
   /* Portrait: one link per row, with the same flower gap between them. */
   @media (max-aspect-ratio:1/1){
     .nav{
       flex-direction:column; align-items:center;
-      gap:calc(var(--type) * .56 + 48px);   /* 1.04 * .54, plus the roof */
+      /* Portrait is the one place the clearings are allowed to blur into
+         each other. Holding a full 48px band between four stacked links
+         needs a 127px gap, which spread the wordmark and `shop` right
+         down the screen; the tighter column reads better than the
+         separation was worth, so these are back to the pre-widening
+         figures and the zones merge into one column. */
+      gap:calc(var(--type) * .56 + 48px);
+      margin-top:min(calc(var(--type) * 1.11 + 48px), 26vh);
     }
-    .nav a{font-size:calc(var(--type) * .48)}
-    /* Portrait drops the vw cap for the nav, so the stack drops it too
-       or the two menus stop matching. */
-    .stack{--sfs:min(calc(var(--type) * .48), calc((100vh - 180px) / 5.08))}
   }
 
-  /* The listen stack states the rule directly: gap = 1.04 * type + the
-     48px roof. What gives on a short screen is then the TYPE, not the
-     roof -- cap the gap instead and the three clearings merge back into
-     one column, which is the thing the roof exists to prevent. The
-     ceiling is the size at which the stack still fits: three lines plus
-     two gaps is 5.08 type-heights plus the two roofs, and 180px covers
-     those roofs, the padding and the off-centre nudge. */
   .stack{
-    /* The same expression the nav links use, cap and all, so the two
-       menus are set at literally one size -- plus the short-screen
-       ceiling below. */
-    --sfs:min(calc(var(--type) * .48), 3.7vw, calc((100vh - 180px) / 5.08));
+    --sfs:var(--menu);
     list-style:none; margin:0; padding:0;
     display:flex; flex-direction:column; align-items:center;
-    gap:calc(var(--sfs) * 1.04 + 48px);
+    /* Same reasoning as the nav, but these carry no 1.25 multiplier,
+       so the floor binds all the way up to 61px of type -- desktop
+       included. Hence the same 127px constant here. */
+    gap:min(max(127px, calc(var(--sfs) * 1.3 + 48px)), 16vh);
   }
   .stack a{font-size:var(--sfs)}                /* matches the nav links */
 
-  /* 20ch is a hair over one line of "stay tuned for upcoming dates" cut
-     in half, so it breaks into two even lines instead of running to the
-     window edges. */
+  /* Only the GAP differs by orientation now that the size is a shared
+     variable -- and this has to sit AFTER the rule above, not with the
+     other portrait rules. `.stack` and `.stack` are equal specificity,
+     so an override placed earlier simply loses on source order and does
+     nothing, which is exactly what stranded the listen links at the
+     landscape cap: 16px against the nav's 26px. */
+  @media (max-aspect-ratio:1/1){
+    .stack{ gap:calc(var(--sfs) * 1.04 + 48px); }
+  }
+
+  /* Both messages are one short line today, but the 20ch cap stays: it
+     is what will break real show dates into even lines rather than
+     letting them run to the window edges. It was measured against "stay
+     tuned for upcoming dates", which it split cleanly in half. */
   .say{
     margin:0; font-weight:700; line-height:1.32; text-transform:lowercase;
-    font-size:calc(var(--type) * .55);
+    font-size:var(--menu);
     letter-spacing:var(--track); text-indent:var(--track);
     color:var(--mark-color); max-width:20ch;
   }
@@ -262,7 +281,7 @@
   </div>
 
   <div class="mark" data-view="shows" hidden>
-    <p class="say"><span data-zone="1">stay tuned for upcoming dates</span></p>
+    <p class="say"><span data-zone="1">coming soon</span></p>
   </div>
 
   <div class="mark" data-view="shop" hidden>
@@ -591,7 +610,7 @@ function ensureBake(a){
      headroom for the largest per-plant scale (p.s tops out near 1.3);
      beyond that a plant softens slightly rather than costing everyone. */
   const q  = Math.min(2.0, DPR * 1.15);
-  const sc = SHRINK * P.size * typeScl;
+  const sc = SHRINK * P.size;
   const dw = a.w*sc, dh = a.h*sc;
   const mw = Math.max(2, Math.round(dw*q)), mh = Math.max(2, Math.round(dh*q));
   if(a.mw === mw && a.mh === mh) return;          // geometry unchanged
@@ -644,30 +663,6 @@ function recolour(a, M){
 
 let ASSETS = [], linenImg = null, linenPat = null;
 const pickDPR = ()=>Math.min(1.5, devicePixelRatio || 1);
-
-/* ---------- meadow scale ------------------------------------------ */
-/* A sprite is a fixed number of pixels wherever it is drawn -- P.size
-   and SHRINK have no viewport term -- but the type is set in vw. So on a
-   phone the meadow was drawn at full desktop size against type less than
-   half as tall, and every relationship tuned at 1440 came out wrong at
-   390: the clearings ended up SMALLER than a single bloom, which is why
-   they looked like they were doing nothing.
-
-   So the plants ride the same ramp the type does, referenced to the size
-   it was all tuned at. Then the composition is the same picture at every
-   width rather than a different one. Read off the wordmark rather than
-   re-stating the CSS clamp, so the two cannot drift apart; divided by
-   markSize so this is the viewport ramp only and nothing else. */
-let typeScl = 1;
-function updateTypeScale(){
-  const el = document.querySelector('.mark h1');
-  const ref = 67.2 * (P.markSize || 1);          // --type at its cap, in px
-  const px  = el ? parseFloat(getComputedStyle(el).fontSize) : ref;
-  const s   = Math.max(0.35, Math.min(1, (px || ref) / ref));
-  const changed = Math.abs(s - typeScl) > 0.005;
-  typeScl = s;
-  return changed;
-}
 
 /* ASSETS objects are created once and mutated in place, so a colour or
    size change re-bakes the sprites without disturbing the field the
@@ -939,7 +934,7 @@ async function boot(){
     if(!imgs[i]) return;
     ASSETS.push({...a, img: imgs[i], stemSrc: a.stem});
   });
-  DPR = pickDPR(); updateTypeScale();   // ensureBake reads both
+  DPR = pickDPR();          // ensureBake reads this
   rebakePlants();
   rebakeGround();
   applyMark();
@@ -1024,13 +1019,7 @@ function seed(){
      anything above that was inert. Raised so the top of the slider
      actually means something; the governor is what protects frame rate,
      not this. */
-  /* Divided by the meadow scale SQUARED, so shrinking the plants on a
-     narrow screen does not thin the field: sprite area goes as the
-     square, so the count has to rise by the same factor to hold the same
-     coverage. Total fill per frame is unchanged -- it is the same number
-     of painted pixels, spread over more and smaller plants. */
-  const target = Math.min(8000, Math.max(260,
-    Math.round(W*H/700*P.density / (typeScl*typeScl))));
+  const target = Math.min(8000, Math.max(260, Math.round(W*H/700*P.density)));
 
   /* Grass-only zones. Type sits badly on a bed of flowers -- too much
      colour and too much silhouette right where the eye needs to resolve
@@ -1071,13 +1060,16 @@ function seed(){
      plant is correctly excluded and still covers the words. Floor every
      semi-axis at half-box + half-bloom, the smallest ellipse that can do
      the job. Measured off the assets rather than hardcoded, so it tracks
-     P.size and the meadow scale. Where the proportional pad is already
-     bigger -- any laptop width -- this changes nothing at all. */
+     P.size. ZONE_CLEAR is added on top so a bloom clears the type rather
+     than merely touching it -- 10px, which is the clearance the laptop
+     proportional pad already gives. Where that pad is bigger the floor
+     does nothing at all; on a phone it is what makes the zone work. */
+  const ZONE_CLEAR = 10;
   const bl = ASSETS.filter(a => a.role !== 'grass' && a.role !== 'stem');
   const TYPICAL = 0.9;                  // the field's usual per-plant scale
   const mean = f => bl.length ? bl.reduce((t,a)=>t+f(a), 0)/bl.length : 0;
-  const bhw = TYPICAL * 0.5 * mean(a=>a.dw);
-  const bhh = TYPICAL * 0.5 * mean(a=>a.dh);
+  const bhw = TYPICAL * 0.5 * mean(a=>a.dw) + ZONE_CLEAR;
+  const bhh = TYPICAL * 0.5 * mean(a=>a.dh) + ZONE_CLEAR;
 
   const zones = [], bareZones = [];
   document.querySelectorAll('[data-zone],[data-bare]').forEach(el=>{
@@ -1342,8 +1334,7 @@ addEventListener('hashchange', ()=>showView(viewFromHash(), true));
 function resize(){
   const wasDPR = DPR;
   DPR = pickDPR();
-  const sclChanged = updateTypeScale();
-  if((DPR !== wasDPR || sclChanged) && ASSETS.length) rebakePlants();
+  if(DPR !== wasDPR && ASSETS.length) rebakePlants();
   W = innerWidth; H = innerHeight;
   canvas.width = Math.round(W*DPR); canvas.height = Math.round(H*DPR);
   canvas.style.width = W+'px'; canvas.style.height = H+'px';

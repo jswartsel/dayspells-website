@@ -153,34 +153,45 @@ not a side effect to be tolerated but the transition itself: the meadow
 grows in from `sizeFrom` around whatever type has just arrived.
 
 The nav holds **one line in landscape and one link per row in portrait**.
-Landscape needs a cap on the type size to manage it (`min(--type * .48,
-3.7vw)`) — the ratio alone outgrows the window at some width whatever it
-is set to, and the row wraps 3+1, which reads like an accident. The
-listen page's links are set with the same expression, cap and all, so
-the two menus are one size.
+Landscape needs a cap on the type size to manage it — the ratio alone
+outgrows the window at some width whatever it is set to, and the row
+wraps 3+1, which reads like an accident.
 
-## Meadow scale
+**All type that is not the wordmark is set at `--menu`**, one variable on
+`:root`: the nav, the listen links, and the sub-pages' messages.
+Landscape is `min(--type * .54, 4.2vw)` — the vw cap holds one line.
+Portrait swaps that for a **px floor**, `max(--type * .54, 26px)`,
+because `--type` is a share of the viewport and on a phone the menu was
+landing at 20px while the wordmark it is measured against cannot grow
+(already 72% of the screen width). A floor in landscape would push the
+row off the screen, hence the split. It is one variable because these
+three drifted apart twice while each rule carried its own copy.
+
+## Scale, and a road not taken
 
 **A sprite is a fixed number of pixels wherever it is drawn** — `P.size`
-and `SHRINK` have no viewport term — but the type is set in `vw`. So the
-meadow used to be drawn at full desktop size against phone type less
-than half as tall, and every relationship tuned at 1440 came out wrong at
-390: the clearings ended up *smaller than a single bloom*, which is why
-they looked like they were doing nothing there.
+and `SHRINK` have no viewport term — while the type is set in `vw`. On a
+phone that used to leave the clearings *smaller than a single bloom*, so
+they did nothing: a plant was correctly excluded from a zone and still
+covered the words, because only its centre is tested.
 
-So the plants ride the same ramp the type does, referenced to the size it
-was all tuned at, and read off the wordmark rather than re-stating the
-CSS clamp so the two cannot drift apart. The plant target is then divided
-by that scale **squared** — sprite area goes as the square, so without it
-shrinking the plants would thin the field into visible linen. Measured at
-390×844: scale 0.418, blooms 23×25px instead of 55×60, 4806 plants
-instead of 843, overdraw 7.2× against the laptop's 6.4× — the same
-painted-pixel budget spread over more and smaller plants, and the same
-picture at both widths.
+The obvious fix is to scale the plants by the same ramp the type uses,
+and divide the plant count by that scale squared to hold coverage. That
+was built and measured — at 390×844 it gave scale 0.418, blooms 23×25px,
+4806 plants against 843, overdraw 7.2× against the laptop's 6.4× — and
+then **reverted**, for two reasons worth recording:
 
-The cost is on the CPU, not the GPU: five times the plants means five
-times the physics and five times the transforms. That is the change most
-likely to bite on a real phone, and `autothin` is off.
+- Many small flowers read as **visual noise** where few large ones read
+  as a meadow. Proportional correctness is not the same as looking right.
+- Five times the plants is five times the physics and five times the
+  transforms. Fill was unchanged, but it moved the cost onto the CPU on
+  exactly the weakest devices, with `autothin` off.
+
+What carries the fix instead is the **floor on the zone semi-axes**
+(below), which is a local correction rather than a global rescale. If
+anyone is tempted to try the rescale again: it works, it is only a few
+lines, and the reason it is not here is taste and phone CPU, not
+correctness.
 
 ## Zones
 
