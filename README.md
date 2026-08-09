@@ -312,7 +312,7 @@ land back where it started.
 
 **Wander** walks the four hue and saturation sliders on their own, each
 bouncing between its bounds on its own interval — hue every 0.25s and
-0.40s, saturation every 0.65s and 0.75s, all divided by `wander speed`
+0.40s, saturation every 1.083s and 1.000s, all divided by `wander speed`
 (2.0 by default, so twice that pace). The intervals are deliberately
 unequal so the four never line up, and the combinations end up somewhere
 nobody picked. Touching any of those four sliders takes back control and
@@ -416,7 +416,7 @@ around words that are no longer there.
 |---|---|
 | **rustle** | amount (0–8; the drawn swing saturates at ~73° from 4 up, see below) |
 | **wander** | speed of the colour drift |
-| **meadow** | ground hue, ground sat, plant hue, plant sat, plant gain, ground zoom, density |
+| **meadow** | ground hue, ground sat, ground gain, plant hue, plant sat, plant gain, ground zoom, density |
 | **plant mix** | relative amount of purple / white / yellow / pink flwrs, and grass |
 | | a live fps / drawn / quality readout |
 
@@ -426,16 +426,20 @@ job and `JSON.stringify(tune(), null, 2)` gives it formatted. The
 paste-it-back-into-`DEFAULTS` workflow is otherwise unchanged.
 
 Several settings are live in `P` and travel in `tune()` but no longer
-have controls: `speed`, `settle` and `radius` (rustle), `bgGain` and
-`bgTint` (ground), `markSize` and `markColor` (the type), and `autothin`.
-Reach them with `tune({…})`. Two are worth knowing about:
+have controls: `speed`, `settle` and `radius` (rustle), `bgTint` and
+`fgTint`, `markSize` and `markColor` (the type), and `autothin`.
+Reach them with `tune({…})`. One is worth knowing about:
 
-- **`bgGain` sits at 1.22**, just past the ~1.2 where the output clamp
-  starts eating `bgHue` on pale material. If the ground hue ever seems
-  unresponsive, that is why — and `tune({bgGain: 1.0})` is now the only
-  way to fix it.
 - **`autothin` is 0**, so the governor is off and nothing thins the
   field. `tune({autothin: 1})` turns the frame-rate protection back on.
+
+**`ground gain` does have a slider now**, sitting with `ground hue` and
+`ground sat` and mirroring `plant gain`. It is the slider to reach for
+when the ground hue seems unresponsive: the default 1.22 already sits
+above the ~1.2 where the output clamp starts eating `bgHue` on pale
+material, and pulling it toward 1.0 gives the hue its travel back. The
+tile measures `[181,188,156]` at gain 1.0 and `[221,229,191]` at 1.22;
+by 1.6 two channels are pinned at 255 and by 2.0 the linen is white.
 
 **Rustle amount** is a gain on the drawn angle, capped by `SWING_MAX`
 (1.5 rad, ~73° once the 0.85 stem factor is applied). Measured peak swing
@@ -466,7 +470,8 @@ the identity, so nothing is touched until you move something.
 > clipped — so the ground hardly responds to hue at all. Saturated,
 > mid-tone assets are fine: a purple iris at `fgGain 1.44` is
 > `[216,79,230]`, nothing clipped, and rotates to a deep green at 180.
-> **If you want to use hue on the ground, drop `bgGain` to about 1.0.**
+> **If you want to use hue on the ground, drop `ground gain` to about
+> 1.0** — it is a slider in the meadow group now, not a `tune()` call.
 
 **Rustle amount** is a gain on the drawn angle, not just a harder shove.
 Driving it through the impulse alone doesn't work — a plant is inside the

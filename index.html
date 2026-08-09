@@ -781,8 +781,11 @@ function rebakeGround(){
 /* Four slow oscillators on the hue and saturation of ground and plants.
    The intervals are deliberately unequal so the four rarely line up, and
    the combinations drift somewhere neither of us would have chosen.
-   Simulated, at wanderSpeed 2: the walkers cycle in 18s, 28.8s, 27.3s
-   and 37.5s, and the exact four-value state repeats every 3.8 days.
+   Simulated, at wanderSpeed 2: the walkers cycle in 18s, 28.8s, 45.5s
+   and 50.0s, and the exact four-value state repeats every 3.8 days.
+   (The two saturation figures moved when those walkers were slowed --
+   they were 27.3s and 37.5s. The repeat lands back on ~3.8 days by
+   coincidence, not by design: 3.79 against 3.8.)
    (An earlier version of this comment claimed four months, from primes
    43x59x71x89 that are not these intervals. See GAME.md for the full
    working, and for why this is deterministic as a state machine but NOT
@@ -796,17 +799,33 @@ function rebakeGround(){
    of the work, and the steps read as deliberate rather than janky.
 
    Each walker bounces between its bounds on its own interval. The
-   intervals are deliberately unequal and share no common factor worth
-   speaking of, so the four never line up and the combinations go
-   somewhere neither of us would have picked. Hue steps fastest; the
-   saturations crawl. The two that drive the plants are the slow ones on
-   purpose -- the ground is a single small tile to re-colour (~2ms), the
-   plants are 26 sprites. */
+   intervals are deliberately unequal, so the four never line up and the
+   combinations go somewhere neither of us would have picked. Hue steps
+   fastest; the saturations crawl. The two that drive the plants are the
+   slow ones on purpose -- the ground is a single small tile to
+   re-colour (~2ms), the plants are 26 sprites.
+
+   The two saturations were slowed deliberately: ground sat to 0.60 of
+   the rate it ran at and plant sat to 0.75 of it. The knob is `every`
+   rather than `step`, because `every` is already the rate term the
+   wanderSpeed slider divides -- so the two compose, and the grain of
+   the walk stays the same as the hue walkers'. Slowing `step` instead
+   would have made the steps finer as well as rarer, which is a
+   different change. 0.65/0.60 = 1.083 and 0.75/0.75 = 1.000.
+
+   That 1.000 is the one blemish on "no common factor": it is exactly
+   four times bgHue's 0.25, so on paper those two step together every
+   fourth ground-hue move. In practice they do not stay locked, because
+   the accumulator below RESETS rather than subtracting -- each walker
+   fires on the first frame past its threshold, so the phases drift
+   apart within seconds and never re-acquire. If the reset is ever
+   fixed (see GAME.md), nudge this to 1.01 and the coincidence goes
+   away at a cost of 1% on the rate. */
 const WANDER = [
-  {k:'bgHue', step:5,    every:0.25, lo:0,    hi:360,  dir: 1, t:0, ground:1},
-  {k:'fgHue', step:5,    every:0.40, lo:0,    hi:360,  dir:-1, t:0, ground:0},
-  {k:'bgSat', step:0.06, every:0.65, lo:0,    hi:2.5,  dir: 1, t:0, ground:1},
-  {k:'fgSat', step:0.05, every:0.75, lo:0,    hi:2.5,  dir:-1, t:0, ground:0}
+  {k:'bgHue', step:5,    every:0.25,  lo:0,   hi:360,  dir: 1, t:0, ground:1},
+  {k:'fgHue', step:5,    every:0.40,  lo:0,   hi:360,  dir:-1, t:0, ground:0},
+  {k:'bgSat', step:0.06, every:1.083, lo:0,   hi:2.5,  dir: 1, t:0, ground:1},
+  {k:'fgSat', step:0.05, every:1.000, lo:0,   hi:2.5,  dir:-1, t:0, ground:0}
 ];
 /* If wander ever feels heavy on a given machine, these two intervals are
    the knob: fgHue and fgSat are the ones that re-colour 26 sprites,
@@ -1590,12 +1609,8 @@ function frame(now){
 /* ---------- tuning panel ----------------------------------------- */
 /* key, label, min, max, step, what changing it costs */
 const CONTROLS = [
-  /* speed, settle, radius, bgGain and bgTint are still live in P and
-     still travel in copy json -- they just have no controls now. Note
-     that bgGain sits at 1.22, above the ~1.2 where the output clamp
-     starts eating bgHue on pale material; if the ground hue ever seems
-     unresponsive, that is why, and it is now only reachable through
-     tune({bgGain: 1.0}). */
+  /* speed, settle, radius and bgTint are still live in P and still
+     travel in copy json -- they just have no controls now. */
   {grp:'rustle'},
   {k:'rustle',  l:'amount',   min:0,    max:8,   step:0.05},
   {grp:'wander'},
@@ -1608,6 +1623,14 @@ const CONTROLS = [
   {grp:'meadow'},
   {k:'bgHue',   l:'ground hue', min:0, max:360, step:1, dp:0, cost:'ground'},
   {k:'bgSat',   l:'ground sat', min:0, max:2.5, step:0.02, cost:'ground'},
+  /* Mirrors plant gain below, and shares its range. Worth knowing while
+     dragging it: the default 1.22 already sits above the ~1.2 where the
+     output clamp starts eating bgHue on pale material -- at 1.51 the
+     linen computes to [343,313,202], two channels clipped, and the
+     ground barely answers the hue slider at all. That is gamut, not a
+     bug. Pulling this down toward 1.0 is what gives ground hue its
+     travel back, and it is a drag now rather than a tune() call. */
+  {k:'bgGain',  l:'ground gain', min:0.2, max:2, step:0.01, cost:'ground'},
   {k:'fgHue',   l:'plant hue',  min:0, max:360, step:1, dp:0, cost:'plants'},
   {k:'fgSat',   l:'plant sat',  min:0, max:2.5, step:0.02, cost:'plants'},
   {k:'fgGain',  l:'plant gain', min:0.2, max:2, step:0.01, cost:'plants'},
@@ -1620,11 +1643,10 @@ const CONTROLS = [
   {k:'mixPink',   l:'pink flwrs',   min:0, max:2, step:0.05, cost:'regrow', rg:1},
   {k:'mixGrass',  l:'grass',        min:0, max:2, step:0.05, cost:'regrow', rg:1}
   /* No controls, still live in P and still reachable through tune():
-     speed / settle / radius, bgGain and bgTint, fgTint, markSize and
-     markColor, sizeFrom / size / grow, and autothin. Two are worth
-     knowing about -- bgGain sits at 1.22, past the ~1.2 where the output
-     clamp starts eating bgHue on pale material, and autothin is 0, so
-     nothing protects frame rate on a slow machine. */
+     speed / settle / radius, bgTint and fgTint, markSize and markColor,
+     sizeFrom / size / grow, and autothin. The one worth knowing about is
+     autothin, which is 0 -- so nothing protects frame rate on a slow
+     machine. */
 ];
 const panel = document.getElementById('tune');
 const inputs = {};

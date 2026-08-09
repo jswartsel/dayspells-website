@@ -261,7 +261,11 @@ first for what the project is and how to run it.
   the linen computes to `[343,313,202]`, two channels clipped, and the
   ground barely responds to `bgHue`. This is gamut, not a bug — no colour
   space fixes it. Mid-tone assets are unaffected. If someone reports the
-  hue slider "not doing anything", check their gain first.
+  hue slider "not doing anything", check their gain first — `ground gain`
+  is a slider in the meadow group now, so the fix is a drag toward 1.0
+  rather than a `tune()` call. Measured on the baked tile: `[181,188,156]`
+  at gain 1.0, `[221,229,191]` at the 1.22 default, two channels pinned at
+  255 by 1.6, and pure white by 2.0.
 
 ## Known issues, not yet fixed
 

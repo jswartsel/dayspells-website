@@ -167,7 +167,11 @@ split. Each plant is a damped spring in a three-wave wind field. Sowing is
 by cluster. A density governor (`autothin`) exists but is **off**.
 
 ### wander
-Four hue/sat walkers on unequal intervals, stepped rather than continuous.
+Four hue/sat walkers on unequal intervals, stepped rather than
+continuous: `every` 0.25 / 0.40 (hues) and 1.083 / 1.000 (sats), divided
+by `wander speed`. The two saturations were slowed on purpose — ground
+sat to 0.60 of the rate it ran at, plant sat to 0.75 — via `every`, not
+`step`, because `every` is the rate term `wanderSpeed` already divides.
 The wordmark colour is **derived, not cycled** — a 24×12 readback of the
 box behind it, steered to the complementary hue with lightness flipped.
 
@@ -190,7 +194,7 @@ Corner links **wander · regrow · mod**. `c` toggles, `Esc` closes,
 |---|---|
 | **rustle** | amount (0–8) |
 | **wander** | speed |
-| **meadow** | ground hue/sat, plant hue/sat/gain, ground zoom, density |
+| **meadow** | ground hue/sat/gain, plant hue/sat/gain, ground zoom, density |
 | **plant mix** | purple / white / yellow / pink flwrs, grass |
 
 Mix and density **queue a regrow 2s** after the last change.
@@ -215,8 +219,11 @@ the same job; `tune()` with no argument returns the current set.
 ```
 
 Several of these no longer have controls but are still live and still
-returned by `tune()`: `speed`, `settle`, `radius`, `bgGain`, `bgTint`,
-`fgTint`, `markSize`, `markColor`, `sizeFrom`, `size`, `grow`, `autothin`.
+returned by `tune()`: `speed`, `settle`, `radius`, `bgTint`, `fgTint`,
+`markSize`, `markColor`, `sizeFrom`, `size`, `grow`, `autothin`.
+`bgGain` **does** have a slider now (`ground gain`, 0.2–2), which is the
+one to reach for when ground hue seems unresponsive — the 1.22 default
+is already past the ~1.2 where the clamp starts eating `bgHue`.
 
 ---
 
@@ -236,8 +243,14 @@ returned by `tune()`: `speed`, `settle`, `radius`, `bgGain`, `bgTint`,
 - **Wander is not wall-clock deterministic.** See `GAME.md` §1 — the
   step accumulator resets rather than subtracting, so the period depends
   on frame rate. Walker cycles at `wanderSpeed 2`: ground hue 18s, ground
-  sat 27.3s, plant hue 28.8s, plant sat 37.5s; full state repeats every
-  **~3.8 days**. (A comment in the file claiming "four months" is stale.)
+  sat 45.5s, plant hue 28.8s, plant sat 50.0s; full state still repeats
+  every **~3.8 days**. (A comment in the file claiming "four months" is
+  stale.) The two saturations were deliberately slowed — see §5.
+- **The accumulator reset costs a few percent of the nominal rate.**
+  Measured A/B at 60.1fps: slowing ground sat to a nominal 0.60 of its
+  rate landed at 0.581, and plant sat to a nominal 0.75 landed at 0.756.
+  Step periods quantise to whole frames, so nominal and measured never
+  quite agree, and the gap moves with frame rate.
 
 ---
 
