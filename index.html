@@ -115,7 +115,7 @@
   @media (max-aspect-ratio:1/1){
     .nav{
       flex-direction:column; align-items:center;
-      gap:calc(var(--type) * .56 + 48px);
+      gap:calc(var(--type) * .56 + 48px);   /* 1.04 * .54, plus the roof */
     }
     .nav a{font-size:calc(var(--type) * .54)}
   }
@@ -177,7 +177,7 @@
   }
   .tools button{
     border:0; background:none; padding:0; cursor:pointer;
-    font-family:inherit; font-weight:700; font-size:14px;
+    font-family:inherit; font-weight:700; font-size:12px;   /* 15% under 14 */
     text-transform:lowercase; letter-spacing:.14em;
     color:var(--mark-color); opacity:1;
   }
@@ -225,9 +225,11 @@
 <body>
 <canvas id="field" aria-hidden="true"></canvas>
 <div class="stage">
-  <!-- data-zone marks a box that gets its own grass-only clearing; the
-       number scales it. Hidden views measure 0x0 and are skipped, so the
-       clearings re-shape themselves when the page changes. -->
+  <!-- Each box gets its own clearing, scaled by the number: data-zone is
+       grass-only, data-bare is nothing at all. Links are bare so a menu
+       reads as cleared ground; the wordmark and the sub-pages' messages
+       keep grass under them. Hidden views measure 0x0 and are skipped,
+       so the clearings re-shape themselves when the page changes. -->
   <div class="mark" data-view="home">
     <!-- data-zone goes on an inline span, not the h1: a block stretches
          to its widest sibling, so the h1 measured the nav row's width and
@@ -235,18 +237,18 @@
          is the union of its line boxes -- the text and nothing else. -->
     <h1><span data-zone="1">dayspells<span class="caret">_</span></span></h1>
     <nav class="nav">
-      <a data-zone="1" href="#listen">listen</a>
-      <a data-zone="1" href="https://www.instagram.com/dayspells" target="_blank" rel="noopener noreferrer">follow</a>
-      <a data-zone="1" href="#shows">shows</a>
-      <a data-zone="1" href="#shop">shop</a>
+      <a data-bare="1" href="#listen">listen</a>
+      <a data-bare="1" href="https://www.instagram.com/dayspells" target="_blank" rel="noopener noreferrer">follow</a>
+      <a data-bare="1" href="#shows">shows</a>
+      <a data-bare="1" href="#shop">shop</a>
     </nav>
   </div>
 
   <div class="mark" data-view="listen" hidden>
     <ul class="stack">
-      <li><a data-zone="1" href="https://dayspells.bandcamp.com/" target="_blank" rel="noopener noreferrer">bandcamp</a></li>
-      <li><a data-zone="1" href="https://music.apple.com/us/artist/dayspells/1722783976" target="_blank" rel="noopener noreferrer">apple music</a></li>
-      <li><a data-zone="1" href="https://open.spotify.com/artist/4VRMA334TNEAriNz0hdn35" target="_blank" rel="noopener noreferrer">spotify</a></li>
+      <li><a data-bare="1" href="https://dayspells.bandcamp.com/" target="_blank" rel="noopener noreferrer">bandcamp</a></li>
+      <li><a data-bare="1" href="https://music.apple.com/us/artist/dayspells/1722783976" target="_blank" rel="noopener noreferrer">apple music</a></li>
+      <li><a data-bare="1" href="https://open.spotify.com/artist/4VRMA334TNEAriNz0hdn35" target="_blank" rel="noopener noreferrer">spotify</a></li>
     </ul>
   </div>
 
@@ -258,7 +260,7 @@
     <p class="say"><span data-zone="1">coming soon</span></p>
   </div>
 </div>
-<a class="back" id="back" href="#home" data-zone="0.8" aria-label="back" hidden>&lt;</a>
+<a class="back" id="back" href="#home" data-bare="0.8" aria-label="back" hidden>&lt;</a>
 <p class="hint" id="hint">move through the field</p>
 <div class="loading" id="loading">threading</div>
 
@@ -778,6 +780,90 @@ function stepWander(dt){
   if(needGround || needPlants) syncWanderInputs();
 }
 
+/* ---------- breathing -------------------------------------------- */
+/* While wander is on, blooms change size as well as colour: a flower is
+   picked at random and eases a step up or a step down, then stops there.
+
+   Both moves are relative to where the plant already is: an up-step
+   multiplies by 1.5, a down-step halves. So a bloom sitting at the
+   grow-in end size blows up to 150% of it, one sitting at 20% goes to
+   30%, and three or four "down" draws in a row put it at the grow-in
+   START size -- the same speck the whole field begins as on load. The
+   ceiling is 150%; the floor is sizeFrom/size.
+
+   The coin is not 50/50, and that is not a style choice. Halving is a
+   bigger move than multiplying by 1.5 -- ln 2 against ln 1.5 -- so a
+   fair coin drifts the whole meadow downward and it settles at a
+   fraction of its size after a few minutes, which reads as the field
+   wilting rather than breathing. BREATHE_FAIR is the weighting that
+   makes the walk stand still, derived from the two step sizes so it
+   stays right if they are re-tuned. On top of that sits a gentle pull
+   back toward the sown size, which is what stops the spread widening
+   forever and brings the deep dives home again.
+
+   This is a DRAW-TIME scale, like grow-in and for the same reason: the
+   sprite is already blitted through a scaling setTransform, so an extra
+   factor costs one multiply. Re-baking a sprite to resize it would cost
+   an order of magnitude more than the whole rest of the frame.
+
+   Only a handful are in flight at once (rate x settle time, about 18),
+   so the update walks a short list rather than all 3300 plants. Picks
+   come from a bloom-only list built at sowing time, not from the whole
+   field -- two thirds of the meadow is grass and stems, so picking at
+   large would have made the rate below mean a third of what it says. */
+const BREATHE_UP     = 1.50;          // an up-step multiplies by this
+const BREATHE_DOWN   = 0.50;          // a down-step multiplies by this
+const BREATHE_HI     = 1.50;          // 150% of the grow-in end size
+const BREATHE_RATE   = 200;           // blooms started per second
+const BREATHE_EASE   = 0.9;           // ~1.1s time constant
+const BREATHE_REVERT = 0.45;          // how hard the coin leans back to 1.0
+/* The coin that leaves the walk standing still, given the two steps. */
+const BREATHE_FAIR   = Math.log(1/BREATHE_DOWN) /
+                       (Math.log(BREATHE_UP) + Math.log(1/BREATHE_DOWN));
+let breathing = [], breatheAcc = 0, blooms = [];
+
+function stepBreathe(dt){
+  /* Not during grow-in. The whole field is already ramping from
+     sizeFrom up to size, and a second scale animation on top of that
+     just fights it -- so the breathing waits for the end size. */
+  const grown = P.grow <= 0 || growT >= P.grow;
+  if(wandering && grown && blooms.length){
+    /* The floor is the grow-in start size, expressed the same way the
+       draw scale is -- sprites are baked at size end, so sizeFrom/size
+       is exactly the speck the field begins as on load. Read per frame
+       because both are live panel values. */
+    const lo = P.size > 0 ? Math.min(0.9, P.sizeFrom / P.size) : 0.1;
+    breatheAcc += dt * BREATHE_RATE;
+    while(breatheAcc >= 1){
+      breatheAcc -= 1;
+      const p = blooms[(Math.random()*blooms.length)|0];
+      if(p.gT !== p.g) continue;                                 // already moving
+      /* The neutral coin, plus a lean toward the size it was sown at.
+         Clamped at both ends so a bloom at the floor still has a real
+         chance of going further down, and one at the ceiling of going
+         further up -- neither end is a trap. */
+      const up = Math.min(0.92, Math.max(0.12,
+                 BREATHE_FAIR + BREATHE_REVERT*(1 - p.g)));
+      const t = p.g * (Math.random() < up ? BREATHE_UP : BREATHE_DOWN);
+      p.gT = Math.min(BREATHE_HI, Math.max(lo, t));
+      if(p.gT !== p.g) breathing.push(p);
+    }
+  }
+  for(let i = breathing.length - 1; i >= 0; i--){
+    const p = breathing[i];
+    p.g += (p.gT - p.g) * Math.min(1, dt*BREATHE_EASE);
+    if(Math.abs(p.gT - p.g) < 0.002){ p.g = p.gT; breathing.splice(i, 1); }
+  }
+}
+
+/* Wander off puts the meadow back the way it was found, the same way
+   the colours land cleanly -- otherwise the field keeps whatever sizes
+   it happened to stop on. Eased, not snapped. */
+function breatheHome(){
+  breathing.length = 0;
+  for(const p of plants) if(p.g !== 1 || p.gT !== 1){ p.gT = 1; breathing.push(p); }
+}
+
 /* The sliders should be seen to move -- that is half the appeal. Ten
    times a second is plenty and keeps the DOM writes off the hot path. */
 function syncWanderInputs(){
@@ -800,7 +886,7 @@ function setWander(on){
   }
   const b = document.getElementById('tWander');
   if(b) b.setAttribute('aria-pressed', String(on));
-  if(!on){ rebakePlants(); rebakeGround(); syncWanderInputs(); }  // land cleanly
+  if(!on){ rebakePlants(); rebakeGround(); syncWanderInputs(); breatheHome(); }  // land cleanly
 }
 
 async function boot(){
@@ -928,13 +1014,19 @@ function seed(){
      was hand-tuned to. */
   const ZONE_TOP = 0.60;
 
-  const zones = [];
-  document.querySelectorAll('[data-zone]').forEach(el=>{
+  /* Two kinds of clearing, same geometry. data-zone is grass-only: the
+     wordmark and the sub-pages' one-line messages, which want something
+     growing under them. data-bare is nothing at all, linen showing
+     through -- every link on the site, so a menu reads as cleared ground
+     rather than as words lying in a flower bed. */
+  const zones = [], bareZones = [];
+  document.querySelectorAll('[data-zone],[data-bare]').forEach(el=>{
     const r = el.getBoundingClientRect();
     if(r.width < 1 || r.height < 1) return;              // hidden view
     const fs = parseFloat(getComputedStyle(el).fontSize) || 16;
-    const k  = parseFloat(el.dataset.zone) || 1;
-    zones.push({
+    const isBare = el.hasAttribute('data-bare');
+    const k = parseFloat(isBare ? el.dataset.bare : el.dataset.zone) || 1;
+    (isBare ? bareZones : zones).push({
       x: r.left + r.width/2,  y: r.top + r.height/2,
       ax: (r.width/2 + fs*ZONE_PAD_X) * k,
       ay: (r.height/2 + fs*ZONE_PAD_Y) * k,
@@ -956,20 +1048,26 @@ function seed(){
     toolBox = {x0: r.left - m - ex, y0: r.top - m,
                x1: r.right + m + ex, y1: r.bottom + m};
   }
-  function bare(x, y){
-    return !!toolBox && x >= toolBox.x0 && x <= toolBox.x1
-                     && y >= toolBox.y0 && y <= toolBox.y1;
-  }
-
-  function grassOnly(x, y){
-    for(let i=0;i<zones.length;i++){
-      const z = zones[i];
+  function inAny(list, x, y){
+    for(let i=0;i<list.length;i++){
+      const z = list[i];
       const dy = y - z.y;
       const ex = (x - z.x)/z.ax, ey = dy/(dy < 0 ? z.up : z.ay);
       if(ex*ex + ey*ey < 1) return true;
     }
     return false;
   }
+  /* The corner links' box is a rectangle rather than an ellipse because
+     two of its four edges run off the screen -- it reads as a cleared
+     corner. The link clearings inside the page are ellipses like the
+     rest, since all four of their edges are visible. */
+  function bare(x, y){
+    if(toolBox && x >= toolBox.x0 && x <= toolBox.x1
+               && y >= toolBox.y0 && y <= toolBox.y1) return true;
+    return inAny(bareZones, x, y);
+  }
+
+  function grassOnly(x, y){ return inAny(zones, x, y); }
 
   /* Everything above is in SCREEN space, but a plant is anchored at its
      foot and drawn upward, so testing the foot puts the patch a whole
@@ -1015,6 +1113,7 @@ function seed(){
       lean: rnd(-0.13, 0.13),
       fade: 0.80 + depth*0.20,
       rank,
+      g: 1, gT: 1,                  // breathing scale, and where it is headed
       phase: Math.random()*Math.PI*2,
       stiff: rnd(46,84), damp: rnd(5.0,7.4),
       bend:0, bendV:0, buzz:0
@@ -1144,6 +1243,10 @@ function seed(){
 
   plants.sort((p,q)=>p.y-q.y);
   growT = 0;                       // a new field grows in from sizeFrom
+  /* The plants these pointed at no longer exist, and the new ones start
+     at 1. Breathing picks up again once the grow-in reaches size end. */
+  breathing.length = 0; breatheAcc = 0;
+  blooms = plants.filter(p => p.a.role !== 'grass' && p.a.role !== 'stem');
 }
 window.regrow = ()=>seed();
 
@@ -1306,6 +1409,9 @@ function frame(now){
   const gz = growth();
 
   if(wandering) stepWander(dt);
+  /* Runs when wander is off too, so anything still in flight -- or on
+     its way back to 1 after wander stopped -- finishes its easing. */
+  if(!reduced && (wandering || breathing.length)) stepBreathe(dt);
 
   ctx.setTransform(DPR,0,0,DPR,0,0);
   ctx.globalAlpha = 1;
@@ -1351,7 +1457,11 @@ function frame(now){
     const shiver = p.buzz * 0.035 * Math.sin(t*34*P.speed + p.phase*7);
     const swing  = Math.max(-SWING_MAX, Math.min(SWING_MAX, p.bend * P.rustle));
     const ang = p.lean + (swing + shiver) * (a.stem > 0 ? 0.85 : 0.60);
-    const co = Math.cos(ang)*p.s*gz, si = Math.sin(ang)*p.s*gz;
+    /* p.g is the breathing scale. Folding it in here is the whole cost
+       of the effect -- one multiply, on a transform that was already
+       being computed. */
+    const ps = p.s*gz*p.g;
+    const co = Math.cos(ang)*ps, si = Math.sin(ang)*ps;
 
     ctx.globalAlpha = p.fade * qa;
     ctx.setTransform(DPR*co*p.flip, DPR*si*p.flip, -DPR*si, DPR*co, DPR*p.x, DPR*p.y);
@@ -1368,18 +1478,19 @@ function frame(now){
 /* ---------- tuning panel ----------------------------------------- */
 /* key, label, min, max, step, what changing it costs */
 const CONTROLS = [
+  /* speed, settle, radius, bgGain and bgTint are still live in P and
+     still travel in copy json -- they just have no controls now. Note
+     that bgGain sits at 1.22, above the ~1.2 where the output clamp
+     starts eating bgHue on pale material; if the ground hue ever seems
+     unresponsive, that is why, and it is now only reachable through
+     tune({bgGain: 1.0}). */
   {grp:'rustle'},
   {k:'rustle',  l:'amount',   min:0,    max:4,   step:0.05},
-  {k:'speed',   l:'speed',    min:0.2,  max:3,   step:0.05},
-  {k:'settle',  l:'duration', min:0.2,  max:4,   step:0.05},
-  {k:'radius',  l:'radius',   min:40,   max:600, step:5,   dp:0},
   {grp:'wander'},
   {k:'wanderSpeed', l:'speed', min:0.25, max:6, step:0.05},
   {grp:'ground color'},
   {k:'bgHue',   l:'hue',   min:0, max:360, step:1, dp:0, cost:'ground'},
   {k:'bgSat',   l:'sat',   min:0, max:2.5, step:0.02, cost:'ground'},
-  {k:'bgGain',  l:'gain',  min:0.2, max:2, step:0.01, cost:'ground'},
-  {k:'bgTint',  l:'tint',  type:'color', cost:'ground'},
   {grp:'plant color'},
   {k:'fgHue',   l:'hue',   min:0, max:360, step:1, dp:0, cost:'plants'},
   {k:'fgSat',   l:'sat',   min:0, max:2.5, step:0.02, cost:'plants'},
@@ -1389,19 +1500,21 @@ const CONTROLS = [
      and its clearings, and wander writes the colour it computes back
      into markColor -- they just no longer have controls. */
   {grp:'mix'},
-  {k:'mixPurple', l:'purple', min:0, max:2, step:0.05, cost:'regrow', rg:1},
-  {k:'mixWhite',  l:'white',  min:0, max:2, step:0.05, cost:'regrow', rg:1},
-  {k:'mixYellow', l:'yellow', min:0, max:2, step:0.05, cost:'regrow', rg:1},
-  {k:'mixPink',   l:'pink',   min:0, max:2, step:0.05, cost:'regrow', rg:1},
-  {k:'mixGrass',  l:'grass',  min:0, max:2, step:0.05, cost:'regrow', rg:1},
-  {grp:'field'},
+  {k:'mixPurple', l:'purple flwrs', min:0, max:2, step:0.05, cost:'regrow', rg:1},
+  {k:'mixWhite',  l:'white flwrs',  min:0, max:2, step:0.05, cost:'regrow', rg:1},
+  {k:'mixYellow', l:'yellow flwrs', min:0, max:2, step:0.05, cost:'regrow', rg:1},
+  {k:'mixPink',   l:'pink flwrs',   min:0, max:2, step:0.05, cost:'regrow', rg:1},
+  {k:'mixGrass',  l:'grass',        min:0, max:2, step:0.05, cost:'regrow', rg:1},
+  {grp:'meadow'},
   {k:'ground',  l:'ground zoom', min:0.12, max:1.5, step:0.01, cost:'ground'},
   {k:'density', l:'density',  min:0.2,  max:4,   step:0.05, cost:'regrow', rg:1},
   {grp:'grow in'},
   {k:'sizeFrom',l:'size start',min:0.2, max:2,   step:0.02, rg:1},
   {k:'size',    l:'size end',  min:0.4, max:2.5, step:0.02, cost:'plants'},
-  {k:'grow',    l:'seconds',   min:0,   max:30,  step:0.5,  dp:1, rg:1},
-  {k:'autothin',l:'auto-thin fps', type:'check'}
+  {k:'grow',    l:'seconds',   min:0,   max:30,  step:0.5,  dp:1, rg:1}
+  /* autothin has no control any more. It is 0 in DEFAULTS, so the
+     governor is off and nothing thins the field -- reach it with
+     tune({autothin: 1}) if a slow machine ever needs protecting. */
 ];
 const panel = document.getElementById('tune');
 const inputs = {};

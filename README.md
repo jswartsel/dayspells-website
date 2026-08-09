@@ -146,7 +146,7 @@ external link opens in a new tab, so the field is still standing when
 you come back.
 
 Only the active page is in the flow; the rest are `[hidden]`, which is
-what keeps the grass zones honest — a hidden box measures 0×0 and drops
+what keeps the zones honest — a hidden box measures 0×0 and drops
 out of the zone pass on its own. On the sub-pages a `<` appears top left
 at the wordmark's own size. **Changing page resows the field**, which is
 not a side effect to be tolerated but the transition itself: the meadow
@@ -157,23 +157,30 @@ Landscape needs a cap on the type size to manage it (`min(--type * .54,
 4.2vw)`) — the ratio alone outgrows the window below about 1150px and
 the row wraps 3+1, which reads like an accident.
 
-## Grass zones
+## Zones
 
 Type sits badly on a bed of flowers: too much colour and too much
 silhouette exactly where the eye is trying to resolve letterforms. So
-every piece of type gets a patch where **only grass is sown** — no
-blooms, no stems, and full grass weight regardless of what the `mix`
-sliders say. It is not a hole in the field, it is a different planting.
-The corner links get the other treatment, a **bare** patch where nothing
-is sown at all: two of that box's four edges run off the screen, so it
-reads as a cleared corner rather than a rectangle cut out of a meadow.
+every piece of type gets a clearing, in one of two kinds:
+
+| attribute | |
+|---|---|
+| `data-zone` | **grass only** — no blooms, no stems, and full grass weight regardless of what the `mix` sliders say. The wordmark, and the sub-pages' one-line messages. |
+| `data-bare` | **nothing at all**, linen showing through. Every link on the site, so a menu reads as cleared ground rather than as words lying in a flower bed. |
+
+A grass zone is not a hole in the field, it is a different planting; a
+bare one is a hole, and meant to be.
 
 There is no longer one clearing at a fixed place. **Every element
-carrying `data-zone` measures its own box and gets its own ellipse** —
-the wordmark, each nav link, each link on the listen page, the back
-caret. That is what makes "one zone per link" cost nothing per page, and
-`markSize` still scales the clearings because it scales the type they
-are measured off.
+carrying either attribute measures its own box and gets its own
+ellipse** — the wordmark, each nav link, each link on the listen page,
+the back caret. That is what makes "one zone per link" cost nothing per
+page, and `markSize` still scales the clearings because it scales the
+type they are measured off.
+
+The corner links are the one exception to the ellipse: their box is a
+rectangle, because two of its four edges run off the screen and it reads
+as a cleared corner rather than as a rectangle cut out of a meadow.
 
 The pad around the box is **additive in em, not a multiplier**. A
 multiplier gives a two-line paragraph twice the margin of a one-line one
@@ -206,15 +213,16 @@ puts the patch a whole plant too high — grass sown along the bottom of
 the zone grows out of the top of it, and blooms rooted below reach in.
 The cluster decision uses the field's average rise (the asset is not
 chosen yet); each plant and each companion stem then uses its own.
-With that, the zones measure 100% grass across all four pages at both
-laptop and phone size.
+With that, every grass zone measures 100% grass and every bare zone
+measures empty, across all four pages at laptop, phone and
+landscape-phone size.
 
-The clearings fill only with whatever clusters happen to centre inside
-them, so a top-up pass brings them to `ZONE_GRASS` (0.84) of their
+The grass clearings fill only with whatever clusters happen to centre
+inside them, so a top-up pass brings them to `ZONE_GRASS` (0.84) of their
 natural density — sowing single blades when the target is above 1,
 thinning at random when it is below. Which zone a blade goes to is
-picked by **area**, or a nav link's small ellipse would get as many
-blades as the wordmark's and end up matted. Sowing needs a tighter
+picked by **area**, or a small ellipse would get as many blades as the
+wordmark's and end up matted. Sowing needs a tighter
 crowding radius, since at the default the zone is already packed and
 every extra blade is refused.
 
@@ -259,8 +267,40 @@ and the text tracks its target to within 9.6° of hue on average. 60fps
 with wander running, worst frame 21ms against 18 idle.
 
 `PROBE_EVERY` (0.08s) and `MARK_EASE` (5.0) are the two knobs: how often
-it looks, and how hard it chases what it sees. The corner links follow it, and the swatch
-keeps up, so the colour it stops on is the one you copy.
+it looks, and how hard it chases what it sees. The corner links follow it,
+so the colour it stops on is the one you copy.
+
+### Breathing
+
+Wander changes the blooms' **size** as well as their colour. Flowers are
+picked at random — 200 a second, so about 500 of the ~1100 are moving at
+any moment — and each eases to a new size and stops there. Both moves are
+relative to where the plant already is: up multiplies by **1.5**, down
+**halves**. A bloom at the grow-in end size blows up to 150% of it, one
+sitting at 20% goes to 30%, and three or four *down* draws in a row put
+it at the grow-in **start** size — the same speck the whole field begins
+as on load. The band is `sizeFrom/size` to 1.5.
+
+It is a **draw-time scale**, like grow-in and for the same reason: the
+sprite is already blitted through a scaling `setTransform`, so the extra
+factor costs one multiply. Measured on a real GPU, 61fps idle and 61fps
+with wander and breathing both running; mean sprite area actually comes
+out slightly *below* rest, so there is no overdraw cost.
+
+**The coin is not 50/50, and that is not a style choice.** Halving is a
+bigger move than multiplying by 1.5 — `ln 2` against `ln 1.5` — so a fair
+coin drifts the whole meadow downward and it settles at a fraction of its
+size after a couple of minutes, which reads as the field wilting rather
+than breathing. `BREATHE_FAIR` (0.631) is the weighting that leaves the
+walk standing still, derived from the two step sizes so it stays right if
+they are re-tuned. `BREATHE_REVERT` adds a gentle pull back toward the
+sown size on top. Measured, the field's mean size holds at 0.90 from 30s
+to 60s while individual blooms span 0.33 to 1.5.
+
+Breathing waits for the **grow-in** to finish — the field is already
+ramping from `sizeFrom` to `size`, and a second scale animation on top of
+that just fights it. A regrow resets every plant to 1 and starts the wait
+again. Turning wander off eases them all home rather than snapping.
 
 It steps rather than glides on purpose. Re-colouring continuously cost
 **15.4ms of a 16.7ms frame** — measured, and far more than the synchronous
@@ -303,14 +343,26 @@ around words that are no longer there.
 
 | group | |
 |---|---|
-| **rustle** | amount, speed, duration, radius |
+| **rustle** | amount |
 | **wander** | speed of the colour drift |
-| **ground color** | hue, sat, gain, tint |
+| **ground color** | hue, sat |
 | **plant color** | hue, sat, gain, tint |
-| **mix** | relative amount of purple, white, yellow, pink, grass |
-| **field** | ground zoom, density |
+| **mix** | relative amount of purple / white / yellow / pink flwrs, and grass |
+| **meadow** | ground zoom, density |
 | **grow in** | size start, size end, seconds |
-| | auto-thin, and a live fps / drawn / quality readout |
+| | a live fps / drawn / quality readout |
+
+Several settings are live in `P` and travel in `copy json` but no longer
+have controls: `speed`, `settle` and `radius` (rustle), `bgGain` and
+`bgTint` (ground), `markSize` and `markColor` (the type), and `autothin`.
+Reach them with `tune({…})`. Two are worth knowing about:
+
+- **`bgGain` sits at 1.22**, just past the ~1.2 where the output clamp
+  starts eating `bgHue` on pale material. If the ground hue ever seems
+  unresponsive, that is why — and `tune({bgGain: 1.0})` is now the only
+  way to fix it.
+- **`autothin` is 0**, so the governor is off and nothing thins the
+  field. `tune({autothin: 1})` turns the frame-rate protection back on.
 
 **Hue** is the one-slider mood control. It rotates every colour at once
 and keeps the relationships between them, so the wool still reads as wool

@@ -52,12 +52,16 @@ first for what the project is and how to run it.
   first, leaving one half still merged, so blooms split at `depth=2`.
   Stems have no second waist to find and recursion just chops them into
   segments, so grass runs one round.
-- **Grass zones are measured off the type, not placed by constants.**
-  Anything carrying `data-zone` contributes an ellipse around its own
-  box, so four nav links and three stacked links cost nothing per page
-  and hidden pages drop out on their own (a `display:none` box measures
-  0×0). Three things had to be right for this to hold up:
-  - **`data-zone` goes on an inline span.** A block stretches to its
+- **Zones are measured off the type, not placed by constants.** Anything
+  carrying `data-zone` (grass only) or `data-bare` (nothing at all)
+  contributes an ellipse around its own box, so four nav links and three
+  stacked links cost nothing per page and hidden pages drop out on their
+  own (a `display:none` box measures 0×0). The split is by role, not by
+  page: **every link is bare, the wordmark and the sub-page messages are
+  grass.** A menu should read as cleared ground; the wordmark wants
+  something growing under it. Three things had to be right for this to
+  hold up:
+  - **The attribute goes on an inline span.** A block stretches to its
     widest sibling, so the `h1` measured the *nav row's* width and the
     wordmark got a clearing half the screen wide. An inline box is the
     union of its line boxes.
@@ -116,6 +120,20 @@ first for what the project is and how to run it.
   beat the UA sheet, so the `display:block` on the link rule un-hid every
   view and the back caret. Views are switched by `[hidden]` and nothing
   else.
+- **Blooms breathe during wander, and the coin is not 50/50.** A bloom
+  eases ×1.5 up or ×0.5 down and stops there, in a band from
+  `sizeFrom/size` to 1.5. Halving is a bigger move than multiplying by
+  1.5 — `ln 2` against `ln 1.5` — so a fair coin drifts the whole meadow
+  downward and it settles at a fraction of its size after a couple of
+  minutes, reading as the field wilting rather than breathing.
+  `BREATHE_FAIR` is derived from the two step sizes so it stays right if
+  they are re-tuned; `BREATHE_REVERT` pulls back toward the sown size on
+  top of it. Measured: mean size holds at 0.90 from 30s to 60s while
+  individual blooms span 0.33 to 1.5. It is a **draw-time scale**, like
+  grow-in — one multiply on a transform already being computed — and it
+  waits for the grow-in to finish, since two scale ramps at once fight
+  each other. Mean sprite *area* comes out slightly below rest, so there
+  is no overdraw cost: 61fps idle, 61fps breathing, headed.
 - **Colour grade is baked into the assets** (`config.GRADE`), not applied
   as a CSS `filter` on the canvas. A compositor filter over a full-screen
   canvas costs on every frame; this costs nothing.
