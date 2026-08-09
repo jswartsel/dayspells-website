@@ -1,0 +1,319 @@
+# dayspells — orientation for a new session
+
+Paste or attach this at the start of a fresh conversation. It is the
+fastest path from cold to useful. The repo also carries:
+
+- **`README.md`** — what the project is, how to run it, how the page works
+- **`CLAUDE.md`** — the trap list: decisions already made, and what broke
+- **`GAME.md`** — speculative notes on the "wanderlust" clock and where a
+  game-like layer could go. Nothing in it is implemented.
+
+Read all three once. This file is the map; `CLAUDE.md` is the minefield.
+
+---
+
+## 1. What this is
+
+A site for the band **dayspells**. The background is a wildflower meadow
+seen from above that sways in an ambient breeze and rustles where the
+cursor brushes through it.
+
+**The premise, which governs every decision: every pixel of the meadow is
+photographic wool.** Nothing is illustrated. The flowers, grasses and
+ground are cutouts extracted programmatically from photographs of 1970s
+crewelwork panels, then scattered procedurally so the field is different
+on every load. If something is missing from the field, it gets
+*extracted*, not drawn.
+
+Private repo, **~39 commits**, branches **`main`** (deploy) and **`dev`**
+(work). `CNAME` is **dayspells.com**. Pages on a private repo needs a paid
+plan — **this has never been confirmed to actually serve.** Check the real
+domain before assuming a push deployed.
+
+---
+
+## 2. Layout
+
+```
+index.html          the entire site: markup, style, and the field engine
+photos/             source photographs (55MB, committed)
+pipeline/
+  config.py         thresholds, colour grade, and the KEEP curation list
+  extract.py        photos -> isolated transparent PNGs
+  build.py          PNGs -> assets/payload.json -> single-file dist/
+assets/
+  flowers/ grass/   extracted cutouts (committed), 27 curated in KEEP
+  ground/           the seamless linen tile
+  payload.json      what the page actually fetches
+dist/dayspells.html self-contained, opens from file://
+tools/serve.py      dev server -> http://localhost:8000/
+tools/check.py      headless screenshots + cursor-wake heatmap
+work/               intermediates, contact sheets (gitignored)
+```
+
+**Run it:**
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+python pipeline/build.py     # assets -> payload + dist
+python tools/serve.py        # -> http://localhost:8000/
+```
+
+`assets/` is committed, so you do **not** need to re-run extraction to
+work on the site. Edit `index.html`, reload. Re-run `build.py` only when
+assets or `config.py` change — **and after any `index.html` change**, or
+`dist/` goes stale. `build.py` also rewrites `assets/palette.json` with
+unseeded k-means, so `git checkout assets/palette.json` after every build
+to keep the diff clean.
+
+---
+
+## 3. History — two eras
+
+**Era 1 (superseded).** Built from two photographs of framed panels.
+Perspective-warped off hand-read frame corners, sampled linen colour from
+the outer margins, isolated each flower with hand-placed seed points plus
+an erode-until-the-stems-snap sweep. About a third of the flowers had to
+be **rejected** because the erosion that severed a stem also ate petals.
+
+**Era 2 (current).** New photographs shot square-on and evenly lit.
+Combined with two requests — *keep the lines that cross a flower*, and
+*emit grass separately* — the whole isolation approach was deleted rather
+than repaired. **The hard part was the part that got deleted:** all the
+erosion machinery existed only to stop a flood fill grabbing neighbours
+through stems. Once occluders were *wanted*, it went away and the
+rejected-flower problem dissolved with it. Extraction is now fully
+automatic — no corners, no seed points. 18 → 27 curated assets.
+
+Ground moved again later: `IMG_1643`, a dedicated close-up of bare linen,
+replaced hunting a clean square out of an embroidered panel.
+
+---
+
+## 4. The extraction pipeline
+
+`python pipeline/extract.py [stage]` — `mask`, `blooms`, `grass`,
+`linen`, `sheet`, or `all`. Always finish with `sheet` and look at the
+contact sheet before editing `config.KEEP`; it is the only reliable way
+to spot bad alpha.
+
+Detail is in `README.md`. The four things that will bite:
+
+- **Linen reference is the panel's dominant chroma mode**, not a margin
+  sample. Margin sampling assumes a clean unstitched border and fails
+  *silently*, degrading segmentation everywhere rather than at the edge.
+- **A bloom is any petal colour, not one colour.** The white irises have
+  purple outlines; componenting one colour shatters them.
+- **`maroon` is subtracted from `dark`.** Crocus outers and iris falls are
+  deep maroon and otherwise land in the foliage gate.
+- **The green family gate is what makes grass separable.** A
+  white-balance shift slides greens out of it and grass returns nothing.
+
+---
+
+## 5. The page
+
+Single file. No build step for the page itself; `build.py` only inlines
+the payload to produce `dist/`.
+
+### Pages
+Five, routed on the hash so the back button works and each is linkable:
+
+| | |
+|---|---|
+| `#home` | the wordmark (links to `#about`) and four links under it |
+| `#about` | who the band is, with a `mailto:` |
+| `#listen` | bandcamp · apple music · spotify |
+| `#shows` | "coming soon" |
+| `#shop` | "coming soon" |
+
+`follow` is not a page — straight out to Instagram. External links open
+in a new tab. Only the active page is in the flow; the rest are
+`[hidden]`, which is what keeps the zones honest (a hidden box measures
+0×0 and drops out of the zone pass). A `<` appears top-left on sub-pages.
+**Changing page resows the field** — that is the transition, not a cost.
+
+### Zones
+Two kinds, same geometry, measured off the type itself via
+`getBoundingClientRect`:
+
+- **`data-zone`** — grass only. Wordmark, sub-page messages, and the menu
+  links (nav at `1.25`, listen links at `1`).
+- **`data-bare`** — nothing sown. Only the back caret, plus the
+  corner-links box (a rectangle, since two edges run off-screen).
+
+`ZONE_PAD_X 0.18` / `ZONE_PAD_Y 0.65` are **additive in em**;
+`ZONE_TOP 0.60` shortens the *pad* above, not the semi-axis. Every
+semi-axis is floored at `half-box + half-bloom + ZONE_CLEAR (10px)`.
+`ZONE_GRASS 0.15` thins the clearings to 15% of what lands in them.
+`BARE 0.80` scales the corner box. **The attribute must sit on an inline
+span** — a block stretches to its widest sibling.
+
+### Type
+One variable, `--menu` on `:root`, drives the nav, the listen links and
+the sub-page messages: `min(--type * .54, 4.2vw)` in landscape (the vw cap
+holds four links on one line), `max(--type * .54, 26px)` in portrait (a px
+floor, because `--type` is a share of the viewport and the wordmark can't
+grow on a phone). `.about` is `calc(--menu * .58)`.
+
+Gaps between stacked type are **`proportional term + 48px`** — a sprite is
+a fixed pixel size at any viewport, so an em-only gap leaves no room for a
+bloom on a phone. Measured: a flat 48px band on every stacked pair.
+
+### Rendering
+Sprites baked once with contact shadow composited in; one `drawImage` per
+plant. `ensureBake(a)` allocates, `recolour(a, M)` does not — keep that
+split. Each plant is a damped spring in a three-wave wind field. Sowing is
+by cluster. A density governor (`autothin`) exists but is **off**.
+
+### wander
+Four hue/sat walkers on unequal intervals, stepped rather than continuous.
+The wordmark colour is **derived, not cycled** — a 24×12 readback of the
+box behind it, steered to the complementary hue with lightness flipped.
+
+The corner link reads **`rest`** while running, with no underline (the
+label names the next click) and a slow pulse via stacked `text-shadow`.
+**Space toggles it.**
+
+### breathing
+While wander runs, blooms change size: ×1.5 up or ×0.5 down, band
+`sizeFrom/size` to 1.5, 200 blooms/sec. Draw-time scale, so ~free.
+**The coin is not 50/50** — `BREATHE_FAIR` (0.631) is derived from the two
+step sizes, because halving is a bigger move than ×1.5 and a fair coin
+wilts the whole meadow.
+
+### The panel
+Corner links **wander · regrow · mod**. `c` toggles, `Esc` closes,
+`#tune` opens on load. Alt-click any control restores its default.
+
+| group | |
+|---|---|
+| **rustle** | amount (0–8) |
+| **wander** | speed |
+| **meadow** | ground hue/sat, plant hue/sat/gain, ground zoom, density |
+| **plant mix** | purple / white / yellow / pink flwrs, grass |
+
+Mix and density **queue a regrow 2s** after the last change.
+**There is no `copy json` button** — `copy(tune())` in the console does
+the same job; `tune()` with no argument returns the current set.
+
+---
+
+## 6. Current defaults
+
+```json
+{
+  "rustle": 3, "speed": 0.7, "settle": 1.5, "radius": 150,
+  "bgTint": "#ffffff", "bgGain": 1.22, "bgHue": 0, "bgSat": 0.6,
+  "fgTint": "#ffffff", "fgGain": 1.35, "fgHue": 0, "fgSat": 0.8,
+  "ground": 0.34, "density": 1.8,
+  "sizeFrom": 0.2, "size": 1.7, "grow": 6,
+  "wanderSpeed": 2, "markSize": 1.3, "markColor": "#f4451f",
+  "mixPurple": 0.25, "mixWhite": 1.55, "mixYellow": 0.8,
+  "mixPink": 0.65, "mixGrass": 0.2, "autothin": 0
+}
+```
+
+Several of these no longer have controls but are still live and still
+returned by `tune()`: `speed`, `settle`, `radius`, `bgGain`, `bgTint`,
+`fgTint`, `markSize`, `markColor`, `sizeFrom`, `size`, `grow`, `autothin`.
+
+---
+
+## 7. Measurements worth not re-deriving
+
+- **Rustle saturates.** Peak drawn swing: 6.7° / 15.8° / 48.5° at
+  settings 1 / 2 / 3, then **73.1° at 4, 5, 6 and 8**. `SWING_MAX` (1.5
+  rad) clamps it. Above 4 no single plant swings further; what changes is
+  how much of the field reaches that swing.
+- **Breathing holds.** Mean bloom size 0.90 from 30s to 60s while
+  individuals span 0.33–1.5. Mean sprite *area* comes out slightly below
+  rest, so no overdraw cost. 61fps idle, 61fps breathing, headed.
+- **Flower bands.** A flat 48px between every stacked pair from 390px
+  wide to 1440.
+- **Zone purity.** 100% grass in every grass zone, empty in every bare
+  zone, across all pages at laptop / phone / landscape-phone.
+- **Wander is not wall-clock deterministic.** See `GAME.md` §1 — the
+  step accumulator resets rather than subtracting, so the period depends
+  on frame rate. Walker cycles at `wanderSpeed 2`: ground hue 18s, ground
+  sat 27.3s, plant hue 28.8s, plant sat 37.5s; full state repeats every
+  **~3.8 days**. (A comment in the file claiming "four months" is stale.)
+
+---
+
+## 8. Working preferences (observed)
+
+- Wants the reasoning, not just the result. Comfortable with technical
+  depth, and reacts well to being told a request's premise is off.
+- Iterates visually and fast; checks things in a real browser himself.
+- Will sometimes say **"don't validate, just make the change"** to save
+  tokens — respect it, but say plainly that it wasn't verified.
+- Prefers work on `dev`, then a fast-forward merge to `main`. Asks
+  explicitly when he wants it pushed; don't push unasked.
+- **Has been right every time he pushed back.** When he said the listen
+  links looked smaller than the nav links, a computed-style check said
+  they matched — the check was wrong (it read the first selector match,
+  which was a *hidden* element). If he says something looks off and the
+  measurement disagrees, distrust the measurement first.
+
+---
+
+## 9. Hard-won lessons
+
+Full list in `CLAUDE.md`. The five that cost the most:
+
+1. **`willReadFrequently: true` pins a canvas to CPU memory.** Correct for
+   a scratch surface you `getImageData` from, ruinous for anything drawn
+   from afterwards. Took the page 60fps → 2.3fps.
+2. **Benchmark canvas work with `headless=False`.** Headless Chromium has
+   no GPU and reported the broken build above as *21% faster*.
+3. **Zone tests must be in visual space, not anchor space.** A plant is
+   rooted at its foot and drawn upward.
+4. **Never re-bake sprites per frame.** Canvas allocation and shadow blur
+   bill after the call returns, so synchronous timing lies.
+5. **Careless stylesheet block edits fail silently, twice now.** A stray
+   `*/` deleted the entire `.nav` rule; closing `:root` early stranded
+   `--cream` inside a media query and the panel silently inherited dark
+   plum. Read the computed value before touching anything else.
+
+---
+
+## 10. Open items
+
+- **`autothin` is 0.** No frame-rate protection on anything slower than
+  the dev Mac. Worth reconsidering before this gets real traffic.
+- **Mobile has never been tested on real hardware.** Everything has been
+  measured at phone *viewports* in desktop Chromium, which is not the same
+  thing — different DPR, touch instead of cursor, and the phantom-gust
+  fallback rather than a pointer.
+- **`shows` and `shop` are identical** ("coming soon"), distinguishable
+  only by URL.
+- **The about paragraph's corners sit outside its ellipse.** Seven lines
+  is far taller relative to width than anything else here, so a bloom
+  lands on the first and last lines. A rounded-rect test for multi-line
+  blocks is the real fix.
+- **`.mark` overhangs the viewport by ~6px** below 900px wide in
+  landscape. Empty padding only; type keeps 39–48px of clearance.
+- **`GRADE` is tuned for the old darker panels and overshoots.** The 2026
+  linen is `#e3cf86` as shot; the grade pushes the tile to `#fbdd7e`.
+  A look decision, flagged and not settled.
+- **No favicon** — a stray `/favicon.ico` 404.
+- **`photos/` is 55MB**, committed so extraction is reproducible. First
+  thing to move if repo size bites.
+- **`assets/palette.json` churns on every build.** Nothing reads it at
+  runtime; seed the k-means if the noise annoys.
+- **GitHub Pages not confirmed live.**
+
+---
+
+## 11. Fast orientation
+
+1. Read `CLAUDE.md`. It is the trap list and it is current.
+2. `python tools/serve.py`, open the page, press `c`.
+3. To change the field's look: it is almost always `DEFAULTS` or
+   `pipeline/config.py::KEEP`, not engine code.
+4. To change extraction: `config.py` first; `extract.py` only if the
+   algorithm itself is wrong. Finish with the `sheet` stage.
+5. **Before claiming a performance result, use a headed browser and check
+   the battery.** At ~7% charge the Mac throttled to exactly 30.0fps in
+   every configuration.

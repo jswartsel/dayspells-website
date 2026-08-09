@@ -779,10 +779,15 @@ function rebakeGround(){
 
 /* ---------- wander ------------------------------------------------ */
 /* Four slow oscillators on the hue and saturation of ground and plants.
-   The periods are primes and deliberately unequal, so the four never
-   line up again in any useful timeframe -- 43x59x71x89 seconds is a
-   beat period of about four months. That is the point: the combinations
-   drift somewhere neither of us would have chosen. */
+   The intervals are deliberately unequal so the four rarely line up, and
+   the combinations drift somewhere neither of us would have chosen.
+   Simulated, at wanderSpeed 2: the walkers cycle in 18s, 28.8s, 27.3s
+   and 37.5s, and the exact four-value state repeats every 3.8 days.
+   (An earlier version of this comment claimed four months, from primes
+   43x59x71x89 that are not these intervals. See GAME.md for the full
+   working, and for why this is deterministic as a state machine but NOT
+   as a wall clock -- the accumulator below resets rather than
+   subtracting, so the period follows the frame rate.) */
 /* Stepped, not continuous. Re-colouring every frame costs 15.4ms of a
    16.7ms budget -- measured, and far more than the 1.4ms the synchronous
    timings suggested, because allocating canvases and running the shadow

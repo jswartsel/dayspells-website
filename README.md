@@ -54,6 +54,14 @@ renders a heatmap of what moved under the cursor.
 
 ---
 
+## Companion documents
+
+| | |
+|---|---|
+| `CONTEXT.md` | orientation for a new session — paste it in cold |
+| `CLAUDE.md` | the trap list: decisions made, and what broke |
+| `GAME.md` | speculative notes on the wander clock and a game layer. Nothing in it is implemented. |
+
 ## Layout
 
 ```
