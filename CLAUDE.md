@@ -94,6 +94,14 @@ first for what the project is and how to run it.
   `1.04 * --sfs + 48px`) keeps the band at 48px everywhere. The one
   place still short is the wordmark-to-nav roof on a landscape phone
   (17px), because the alternative is shrinking the wordmark.
+- **Careless block edits to the stylesheet fail silently, twice now.**
+  Inserting `--menu` into `:root` closed the block early and left
+  `--frond-dark` and `--cream` stranded inside the following `@media`,
+  where they are invalid and dropped. Nothing errored; `var(--cream)`
+  simply became invalid, so the panel inherited `body`'s dark plum
+  instead of cream. If a colour or a rule "just changed", read the
+  computed value and check the variable actually resolves before
+  touching anything else.
 - **A stray `*/` silently deleted the entire `.nav` rule.** Appending a
   second comment tail to an already-closed block comment left the CSS
   parser dropping everything after it: no margin, no flex, four links

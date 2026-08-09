@@ -281,16 +281,26 @@ every extra blade is refused.
 Three links sit in the top-right corner, set in the wordmark's face and
 colour so they read as part of the page rather than as chrome:
 
-- **wander** — drift the colors. Reads **rest** while it is running: the
-  label names what the click will do, not what is happening. The row is
-  anchored by its right edge, so the shorter word shrinks it leftward and
-  `regrow` / `tweak` stay put.
-- **regrow** — resow the field
-- **tweak** — toggle the panel
+- **wander** — drift the colors (*"lose the hour on a trail"*). Reads
+  **rest** while it is running (*"at the wishing well"*): the
+  label names what the click will do, not what is happening. Because of
+  that it carries no underline in that state — an underline would be
+  saying "you are here" about a button that means "leave" — and instead
+  pulses slowly to read as armed. Hover still underlines, and reduced
+  motion gets a static dim rather than nothing. The row is anchored by
+  its right edge, so the shorter word shrinks it leftward and
+  `regrow` / `mod` stay put.
+- **regrow** — resow the meadow
+- **mod** — toggle the panel
 
-They stay put while the panel is open, so `tweak` is always there to
-close it again. `c` toggles and `Esc` closes as well, and `#tune` in the
-URL opens it on load. The panel itself is hidden by default.
+They stay put while the panel is open, so `mod` is always there to close
+it again. **Space** toggles wander, `c` toggles the panel and `Esc`
+closes it; `#tune` in the URL opens it on load. The panel itself is
+hidden by default.
+
+Space is ignored while a button or slider has focus — those already
+answer to space themselves, and handling it twice would toggle twice and
+land back where it started.
 
 **Wander** walks the four hue and saturation sliders on their own, each
 bouncing between its bounds on its own interval — hue every 0.25s and
@@ -299,7 +309,7 @@ bouncing between its bounds on its own interval — hue every 0.25s and
 unequal so the four never line up, and the combinations end up somewhere
 nobody picked. Touching any of those four sliders takes back control and
 stops it; toggling it off leaves the values where they landed, so you can
-`copy json` a combination you like.
+`copy(tune())` on a combination you like.
 
 The wordmark doesn't cycle blindly — it **reads what is behind it**. Six
 times a second wander downscales the box the wordmark occupies into a
@@ -380,7 +390,7 @@ Works on sliders, colour swatches and the checkbox.
 
 Some settings only take effect when the field is resown, and resowing
 mid-drag would be jarring and expensive. Those **queue a regrow instead**:
-four quiet seconds after the last such change, whichever control it was,
+two quiet seconds after the last such change, whichever control it was,
 the field regrows itself. Touching another one restarts the clock, so a
 run of adjustments costs one resow rather than ten. The note line reads
 `regrowing…` while one is pending. Hitting `regrow` yourself, or `reset`,
@@ -396,16 +406,18 @@ around words that are no longer there.
 
 | group | |
 |---|---|
-| **rustle** | amount |
+| **rustle** | amount (0–8; the drawn swing saturates at ~73° from 4 up, see below) |
 | **wander** | speed of the colour drift |
-| **ground color** | hue, sat |
-| **plant color** | hue, sat, gain, tint |
-| **mix** | relative amount of purple / white / yellow / pink flwrs, and grass |
-| **meadow** | ground zoom, density |
-| **grow in** | size start, size end, seconds |
+| **meadow** | ground hue, ground sat, plant hue, plant sat, plant gain, ground zoom, density |
+| **plant mix** | relative amount of purple / white / yellow / pink flwrs, and grass |
 | | a live fps / drawn / quality readout |
 
-Several settings are live in `P` and travel in `copy json` but no longer
+There is no `copy json` button any more — `tune()` with no argument
+returns the current set, so `copy(tune())` in the console does the same
+job and `JSON.stringify(tune(), null, 2)` gives it formatted. The
+paste-it-back-into-`DEFAULTS` workflow is otherwise unchanged.
+
+Several settings are live in `P` and travel in `tune()` but no longer
 have controls: `speed`, `settle` and `radius` (rustle), `bgGain` and
 `bgTint` (ground), `markSize` and `markColor` (the type), and `autothin`.
 Reach them with `tune({…})`. Two are worth knowing about:
@@ -416,6 +428,16 @@ Reach them with `tune({…})`. Two are worth knowing about:
   way to fix it.
 - **`autothin` is 0**, so the governor is off and nothing thins the
   field. `tune({autothin: 1})` turns the frame-rate protection back on.
+
+**Rustle amount** is a gain on the drawn angle, capped by `SWING_MAX`
+(1.5 rad, ~73° once the 0.85 stem factor is applied). Measured peak swing
+against the setting: 6.7° at 1, 15.8° at 2, 48.5° at 3, then **73.1° at
+4, 5, 6 and 8** — the raw angle keeps climbing (92.9° → 194.8°) but the
+clamp takes it. So above 4 no single plant swings further; what does
+still change is how *much* of the field reaches that swing, since the
+impulse grows with the square of the setting. Raise `SWING_MAX` if the
+top of the slider should move the peak too — but past ~2.5 rad plants
+swing beyond horizontal and read as falling over rather than bending.
 
 **Hue** is the one-slider mood control. It rotates every colour at once
 and keeps the relationships between them, so the wool still reads as wool
@@ -462,7 +484,7 @@ The **words** group is gone from the panel. `markSize` and `markColor`
 still exist in `P` — the first scales the type and, through it, every
 clearing; the second is what wander writes the colour it computes back
 into — they just no longer have controls. Both still travel in
-`copy json`, and `tune({markSize: …})` still works.
+`tune()`, and `tune({markSize: …})` still works.
 
 **Grow in** ramps the field up from `size start` to `size end` over
 `seconds`, on load and on every regrow. It is a draw-time scale — sprites

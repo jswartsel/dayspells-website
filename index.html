@@ -26,6 +26,8 @@
        here and overridden once below, so the three can never drift apart
        -- they did, twice, when each rule carried its own copy. */
     --menu: min(calc(var(--type) * .54), 4.2vw);
+    --frond-dark: #1a130b;
+    --cream:      #f3dfb9;
   }
   /* Portrait: a px floor instead of the vw cap. --type is a share of the
      viewport, so on a phone the menu was landing at 20px while the
@@ -34,8 +36,6 @@
      a floor would push the row off the screen, hence the split. */
   @media (max-aspect-ratio:1/1){
     :root{ --menu: max(calc(var(--type) * .54), 26px); }
-    --frond-dark: #1a130b;
-    --cream:      #f3dfb9;
   }
   *{box-sizing:border-box}
   /* Author styles beat the UA sheet, so the display rules below would
@@ -173,6 +173,28 @@
     color:var(--mark-color); max-width:20ch;
   }
 
+  /* The wordmark is a link now. It must stay INLINE: as a block it fills
+     the h1, which stretches to the nav row -- so the click target would
+     be half the screen wide and the zone it carries would measure the
+     nav's width rather than the word's. */
+  .mark h1 a{display:inline}
+
+  /* The one block of running text on the site. Same face and weight as
+     everything else, but a paragraph set at menu size with menu tracking
+     is a wall, so it is smaller and tighter. */
+  .about{
+    margin:0; font-weight:700; line-height:1.62; text-transform:lowercase;
+    font-size:calc(var(--menu) * .58);
+    letter-spacing:.08em; text-indent:0;
+    color:var(--mark-color); max-width:30ch;
+  }
+  /* Inline, or the block rule above drops the address onto its own line
+     and out of the sentence. nowrap keeps the address itself unbroken. */
+  .about a{
+    display:inline; white-space:nowrap; text-indent:0;
+    font-size:inherit; letter-spacing:inherit; text-decoration:underline;
+  }
+
   .back{
     position:fixed; z-index:9;
     top:clamp(.1rem,1.2vh,.9rem); left:clamp(.5rem,2.2vw,1.5rem);
@@ -210,8 +232,29 @@
     color:var(--mark-color); opacity:1;
   }
   .tools button:hover{text-decoration:underline}   /* opacity is 1 now */
-  .tools button[aria-expanded="true"],
-  .tools button[aria-pressed="true"]{opacity:1; text-decoration:underline}
+  .tools button[aria-expanded="true"]{opacity:1; text-decoration:underline}
+  /* While wander runs the label reads "rest", which names the NEXT
+     click rather than the current state -- so an underline was saying
+     "you are here" about a button that means "leave". A slow pulse says
+     armed and waiting instead. Hover still underlines, so the button
+     answers to the pointer like the others.
+
+     It pulses HEAVIER, not dimmer: fading toward transparent reads as
+     disabled, thickening reads as live. Space Mono ships 400 and 700
+     only and the button is already 700, so a font-weight animation has
+     nothing heavier to land on. -webkit-text-stroke-width does thicken
+     the glyph but Chrome interpolates it DISCRETELY -- measured, it
+     snaps 0 -> .45px at the midpoint, which is a blink rather than a
+     pulse. Stacked zero-offset text-shadows in currentColor do fatten
+     smoothly (measured easing right through 0.08, 0.24, 0.41, 0.55),
+     and currentColor means the thickening follows the wordmark's colour
+     as it wanders. */
+  .tools button[aria-pressed="true"]{text-decoration:none; animation:ready 2.4s ease-in-out infinite}
+  .tools button[aria-pressed="true"]:hover{text-decoration:underline}
+  @keyframes ready{
+    0%,100%{text-shadow:0 0 0 currentColor, 0 0 0 currentColor, 0 0 0 currentColor}
+    50%    {text-shadow:0 0 .6px currentColor, 0 0 .6px currentColor, 0 0 .6px currentColor}
+  }
   .tune{
     position:fixed; top:44px; right:8px; z-index:8; width:178px;
     max-height:calc(100vh - 52px); overflow-y:auto;
@@ -247,7 +290,15 @@
   .tune button:hover{background:rgba(243,223,185,.2)}
   .tune .note{margin:6px 0 0; opacity:.4; line-height:1.35}
 
-  @media (prefers-reduced-motion: reduce){ .mark .caret{animation:none} }
+  @media (prefers-reduced-motion: reduce){
+    .mark .caret{animation:none}
+    /* Still has to read as armed, so hold the heavy end statically
+       rather than dropping the affordance altogether. */
+    .tools button[aria-pressed="true"]{
+      animation:none;
+      text-shadow:0 0 .6px currentColor, 0 0 .6px currentColor, 0 0 .6px currentColor;
+    }
+  }
 </style>
 </head>
 <body>
@@ -263,13 +314,17 @@
          to its widest sibling, so the h1 measured the nav row's width and
          the wordmark got a clearing half the screen wide. An inline box
          is the union of its line boxes -- the text and nothing else. -->
-    <h1><span data-zone="1">dayspells<span class="caret">_</span></span></h1>
+    <h1><a data-zone="1" href="#about">dayspells<span class="caret">_</span></a></h1>
     <nav class="nav">
       <a data-zone="1.25" href="#listen">listen</a>
       <a data-zone="1.25" href="https://www.instagram.com/dayspells" target="_blank" rel="noopener noreferrer">follow</a>
       <a data-zone="1.25" href="#shows">shows</a>
       <a data-zone="1.25" href="#shop">shop</a>
     </nav>
+  </div>
+
+  <div class="mark" data-view="about" hidden>
+    <p class="about"><span data-zone="1">dayspells is a band from orlando, fl. our names are nate, justin, tim and chris. we are glad you are here. if you want to reach us email <a href="mailto:dayspellsmusic@gmail.com">dayspellsmusic@gmail.com</a></span></p>
   </div>
 
   <div class="mark" data-view="listen" hidden>
@@ -293,17 +348,16 @@
 <div class="loading" id="loading">threading</div>
 
 <div class="tools">
-  <button id="tWander" aria-pressed="false" title="drift the colors">wander</button>
-  <button id="tRegrow" title="resow the field">regrow</button>
-  <button id="tOptions" aria-expanded="false" aria-controls="tune">tweak</button>
+  <button id="tWander" aria-pressed="false" title="lose the hour on a trail">wander</button>
+  <button id="tRegrow" title="resow the meadow">regrow</button>
+  <button id="tOptions" aria-expanded="false" aria-controls="tune">mod</button>
 </div>
 <div class="tune" id="tune" hidden>
   <div id="tuneBody"></div>
   <div class="row">
-    <button id="tCopy">copy json</button>
     <button id="tReset">reset</button>
   </div>
-  <p class="note" id="tuneNote">auto-regrows 4s after a change.</p>
+  <p class="note" id="tuneNote">auto-regrows 2s after a change.</p>
 </div>
 
 <script id="payload" type="application/json"></script>
@@ -920,7 +974,7 @@ function setWander(on){
   if(b){
     b.setAttribute('aria-pressed', String(on));
     b.textContent = on ? 'rest' : 'wander';
-    b.title = on ? 'stop the drift' : 'drift the colors';
+    b.title = on ? 'at the wishing well' : 'lose the hour on a trail';
   }
   if(!on){ rebakePlants(); rebakeGround(); syncWanderInputs(); breatheHome(); }  // land cleanly
 }
@@ -1312,7 +1366,7 @@ window.regrow = ()=>seed();
    Routing is on the hash so the browser's own back button works and a
    page can be linked to directly. Anything unrecognised (including the
    long-standing #tune) falls through to home. */
-const VIEWS = {home:1, listen:1, shows:1, shop:1};
+const VIEWS = {home:1, about:1, listen:1, shows:1, shop:1};
 let booted = false;
 
 function viewFromHash(){
@@ -1538,36 +1592,34 @@ const CONTROLS = [
      unresponsive, that is why, and it is now only reachable through
      tune({bgGain: 1.0}). */
   {grp:'rustle'},
-  {k:'rustle',  l:'amount',   min:0,    max:4,   step:0.05},
+  {k:'rustle',  l:'amount',   min:0,    max:8,   step:0.05},
   {grp:'wander'},
   {k:'wanderSpeed', l:'speed', min:0.25, max:6, step:0.05},
-  {grp:'ground color'},
-  {k:'bgHue',   l:'hue',   min:0, max:360, step:1, dp:0, cost:'ground'},
-  {k:'bgSat',   l:'sat',   min:0, max:2.5, step:0.02, cost:'ground'},
-  {grp:'plant color'},
-  {k:'fgHue',   l:'hue',   min:0, max:360, step:1, dp:0, cost:'plants'},
-  {k:'fgSat',   l:'sat',   min:0, max:2.5, step:0.02, cost:'plants'},
-  {k:'fgGain',  l:'gain',  min:0.2, max:2, step:0.01, cost:'plants'},
-  {k:'fgTint',  l:'tint',  type:'color', cost:'plants'},
-  /* markSize and markColor still exist in P -- markSize scales the type
-     and its clearings, and wander writes the colour it computes back
-     into markColor -- they just no longer have controls. */
-  {grp:'mix'},
+  /* Ground and plant colour, zoom and density are one group: they are
+     all "what the meadow looks like", and split across three headings
+     the panel read as longer than it is. Labels carry the qualifier
+     instead, so `hue` twice in two sections becomes `ground hue` and
+     `plant hue` in one. */
+  {grp:'meadow'},
+  {k:'bgHue',   l:'ground hue', min:0, max:360, step:1, dp:0, cost:'ground'},
+  {k:'bgSat',   l:'ground sat', min:0, max:2.5, step:0.02, cost:'ground'},
+  {k:'fgHue',   l:'plant hue',  min:0, max:360, step:1, dp:0, cost:'plants'},
+  {k:'fgSat',   l:'plant sat',  min:0, max:2.5, step:0.02, cost:'plants'},
+  {k:'fgGain',  l:'plant gain', min:0.2, max:2, step:0.01, cost:'plants'},
+  {k:'ground',  l:'ground zoom', min:0.12, max:1.5, step:0.01, cost:'ground'},
+  {k:'density', l:'density',  min:0.2,  max:4,   step:0.05, cost:'regrow', rg:1},
+  {grp:'plant mix'},
   {k:'mixPurple', l:'purple flwrs', min:0, max:2, step:0.05, cost:'regrow', rg:1},
   {k:'mixWhite',  l:'white flwrs',  min:0, max:2, step:0.05, cost:'regrow', rg:1},
   {k:'mixYellow', l:'yellow flwrs', min:0, max:2, step:0.05, cost:'regrow', rg:1},
   {k:'mixPink',   l:'pink flwrs',   min:0, max:2, step:0.05, cost:'regrow', rg:1},
-  {k:'mixGrass',  l:'grass',        min:0, max:2, step:0.05, cost:'regrow', rg:1},
-  {grp:'meadow'},
-  {k:'ground',  l:'ground zoom', min:0.12, max:1.5, step:0.01, cost:'ground'},
-  {k:'density', l:'density',  min:0.2,  max:4,   step:0.05, cost:'regrow', rg:1},
-  {grp:'grow in'},
-  {k:'sizeFrom',l:'size start',min:0.2, max:2,   step:0.02, rg:1},
-  {k:'size',    l:'size end',  min:0.4, max:2.5, step:0.02, cost:'plants'},
-  {k:'grow',    l:'seconds',   min:0,   max:30,  step:0.5,  dp:1, rg:1}
-  /* autothin has no control any more. It is 0 in DEFAULTS, so the
-     governor is off and nothing thins the field -- reach it with
-     tune({autothin: 1}) if a slow machine ever needs protecting. */
+  {k:'mixGrass',  l:'grass',        min:0, max:2, step:0.05, cost:'regrow', rg:1}
+  /* No controls, still live in P and still reachable through tune():
+     speed / settle / radius, bgGain and bgTint, fgTint, markSize and
+     markColor, sizeFrom / size / grow, and autothin. Two are worth
+     knowing about -- bgGain sits at 1.22, past the ~1.2 where the output
+     clamp starts eating bgHue on pale material, and autothin is 0, so
+     nothing protects frame rate on a slow machine. */
 ];
 const panel = document.getElementById('tune');
 const inputs = {};
@@ -1589,10 +1641,10 @@ function schedule(kind){
 
 /* Density, the mix, the grow-in and the words' clearing only take effect
    when the field is resown, and resowing mid-drag would be both jarring
-   and expensive. So they queue one: four quiet seconds after the last
+   and expensive. So they queue one: two quiet seconds after the last
    such change, whichever control it was, the field regrows itself. */
-const REGROW_WAIT = 4000;
-let regrowTimer = null, noteIdle = 'auto-regrows 4s after a change.';
+const REGROW_WAIT = 2000;
+let regrowTimer = null, noteIdle = 'auto-regrows 2s after a change.';
 
 function setNote(s){ const n = document.getElementById('tuneNote'); if(n) n.textContent = s; }
 function cancelRegrow(){
@@ -1711,20 +1763,6 @@ function buildPanel(){
     Object.assign(P, DEFAULTS); syncPanel(); applyMark(); rebakePlants(); rebakeGround(); seed();
     setNote(noteIdle);
   };
-  document.getElementById('tCopy').onclick = async ()=>{
-    const txt = JSON.stringify(P, null, 2);
-    const note = document.getElementById('tuneNote');
-    try { await navigator.clipboard.writeText(txt); note.textContent = 'copied. paste it back to persist.'; }
-    catch(e){
-      const ta = document.createElement('textarea');
-      ta.value = txt; document.body.appendChild(ta); ta.select();
-      try { document.execCommand('copy'); note.textContent = 'copied. paste it back to persist.'; }
-      catch(e2){ note.textContent = 'copy failed -- see console'; console.log(txt); }
-      ta.remove();
-    }
-    setTimeout(()=>{ if(!regrowTimer) note.textContent = noteIdle; }, 4000);
-  };
-
   /* The corner links sit above the panel and never move, so options
      is always there to close it again. */
   const optBtn = document.getElementById('tOptions');
@@ -1735,6 +1773,15 @@ function buildPanel(){
   addEventListener('keydown', e=>{
     if(e.key === 'c' && !e.metaKey && !e.ctrlKey && !e.altKey) show(panel.hidden);
     if(e.key === 'Escape') show(false);
+    /* Space toggles wander. Skipped when a control has focus: a button
+       or a slider already answers to space itself, so handling it here
+       as well would toggle twice and land back where it started. */
+    if(e.key === ' ' && !e.metaKey && !e.ctrlKey && !e.altKey){
+      const t = e.target;
+      if(t && (t.tagName === 'INPUT' || t.tagName === 'BUTTON')) return;
+      e.preventDefault();
+      setWander(!wandering);
+    }
   });
   /* Hidden by default everywhere. The corner dot, `c`, or #tune opens it. */
   if(location.hash.includes('tune')) show(true);
