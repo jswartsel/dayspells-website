@@ -104,12 +104,15 @@
   .nav{
     margin:min(calc(var(--type) * 1.11 + 48px), 26vh) 0 0;
     display:flex; flex-wrap:nowrap; justify-content:center;
-    gap:clamp(.8rem,3.4vw,2.4rem);
+    gap:clamp(.96rem,4.08vw,2.88rem);   /* 20% over what it was */
   }
-  /* 4pt under where it started. The vw cap is what holds all four on one
+  /* 8pt under where it started. The vw cap is what holds all four on one
      line in landscape at any width, without wrapping and without
-     overflowing -- the ratio alone outgrows the window below ~1150px. */
-  .nav a{font-size:min(calc(var(--type) * .54), 4.2vw)}
+     overflowing -- the ratio alone outgrows the window below ~1150px.
+     The gaps are deliberately NOT scaled down with it: holding them
+     constant while the words shrink is what opens space between the
+     clearings. */
+  .nav a{font-size:min(calc(var(--type) * .48), 3.7vw)}
 
   /* Portrait: one link per row, with the same flower gap between them. */
   @media (max-aspect-ratio:1/1){
@@ -117,7 +120,10 @@
       flex-direction:column; align-items:center;
       gap:calc(var(--type) * .56 + 48px);   /* 1.04 * .54, plus the roof */
     }
-    .nav a{font-size:calc(var(--type) * .54)}
+    .nav a{font-size:calc(var(--type) * .48)}
+    /* Portrait drops the vw cap for the nav, so the stack drops it too
+       or the two menus stop matching. */
+    .stack{--sfs:min(calc(var(--type) * .48), calc((100vh - 180px) / 5.08))}
   }
 
   /* The listen stack states the rule directly: gap = 1.04 * type + the
@@ -128,12 +134,15 @@
      two gaps is 5.08 type-heights plus the two roofs, and 180px covers
      those roofs, the padding and the off-centre nudge. */
   .stack{
-    --sfs:min(calc(var(--type) * .72), calc((100vh - 180px) / 5.08));
+    /* The same expression the nav links use, cap and all, so the two
+       menus are set at literally one size -- plus the short-screen
+       ceiling below. */
+    --sfs:min(calc(var(--type) * .48), 3.7vw, calc((100vh - 180px) / 5.08));
     list-style:none; margin:0; padding:0;
     display:flex; flex-direction:column; align-items:center;
     gap:calc(var(--sfs) * 1.04 + 48px);
   }
-  .stack a{font-size:var(--sfs)}                /* slightly under the wordmark */
+  .stack a{font-size:var(--sfs)}                /* matches the nav links */
 
   /* 20ch is a hair over one line of "stay tuned for upcoming dates" cut
      in half, so it breaks into two even lines instead of running to the
@@ -237,18 +246,18 @@
          is the union of its line boxes -- the text and nothing else. -->
     <h1><span data-zone="1">dayspells<span class="caret">_</span></span></h1>
     <nav class="nav">
-      <a data-bare="1" href="#listen">listen</a>
-      <a data-bare="1" href="https://www.instagram.com/dayspells" target="_blank" rel="noopener noreferrer">follow</a>
-      <a data-bare="1" href="#shows">shows</a>
-      <a data-bare="1" href="#shop">shop</a>
+      <a data-zone="1.25" href="#listen">listen</a>
+      <a data-zone="1.25" href="https://www.instagram.com/dayspells" target="_blank" rel="noopener noreferrer">follow</a>
+      <a data-zone="1.25" href="#shows">shows</a>
+      <a data-zone="1.25" href="#shop">shop</a>
     </nav>
   </div>
 
   <div class="mark" data-view="listen" hidden>
     <ul class="stack">
-      <li><a data-bare="1" href="https://dayspells.bandcamp.com/" target="_blank" rel="noopener noreferrer">bandcamp</a></li>
-      <li><a data-bare="1" href="https://music.apple.com/us/artist/dayspells/1722783976" target="_blank" rel="noopener noreferrer">apple music</a></li>
-      <li><a data-bare="1" href="https://open.spotify.com/artist/4VRMA334TNEAriNz0hdn35" target="_blank" rel="noopener noreferrer">spotify</a></li>
+      <li><a data-zone="1" href="https://dayspells.bandcamp.com/" target="_blank" rel="noopener noreferrer">bandcamp</a></li>
+      <li><a data-zone="1" href="https://music.apple.com/us/artist/dayspells/1722783976" target="_blank" rel="noopener noreferrer">apple music</a></li>
+      <li><a data-zone="1" href="https://open.spotify.com/artist/4VRMA334TNEAriNz0hdn35" target="_blank" rel="noopener noreferrer">spotify</a></li>
     </ul>
   </div>
 
@@ -582,7 +591,7 @@ function ensureBake(a){
      headroom for the largest per-plant scale (p.s tops out near 1.3);
      beyond that a plant softens slightly rather than costing everyone. */
   const q  = Math.min(2.0, DPR * 1.15);
-  const sc = SHRINK * P.size;
+  const sc = SHRINK * P.size * typeScl;
   const dw = a.w*sc, dh = a.h*sc;
   const mw = Math.max(2, Math.round(dw*q)), mh = Math.max(2, Math.round(dh*q));
   if(a.mw === mw && a.mh === mh) return;          // geometry unchanged
@@ -635,6 +644,30 @@ function recolour(a, M){
 
 let ASSETS = [], linenImg = null, linenPat = null;
 const pickDPR = ()=>Math.min(1.5, devicePixelRatio || 1);
+
+/* ---------- meadow scale ------------------------------------------ */
+/* A sprite is a fixed number of pixels wherever it is drawn -- P.size
+   and SHRINK have no viewport term -- but the type is set in vw. So on a
+   phone the meadow was drawn at full desktop size against type less than
+   half as tall, and every relationship tuned at 1440 came out wrong at
+   390: the clearings ended up SMALLER than a single bloom, which is why
+   they looked like they were doing nothing.
+
+   So the plants ride the same ramp the type does, referenced to the size
+   it was all tuned at. Then the composition is the same picture at every
+   width rather than a different one. Read off the wordmark rather than
+   re-stating the CSS clamp, so the two cannot drift apart; divided by
+   markSize so this is the viewport ramp only and nothing else. */
+let typeScl = 1;
+function updateTypeScale(){
+  const el = document.querySelector('.mark h1');
+  const ref = 67.2 * (P.markSize || 1);          // --type at its cap, in px
+  const px  = el ? parseFloat(getComputedStyle(el).fontSize) : ref;
+  const s   = Math.max(0.35, Math.min(1, (px || ref) / ref));
+  const changed = Math.abs(s - typeScl) > 0.005;
+  typeScl = s;
+  return changed;
+}
 
 /* ASSETS objects are created once and mutated in place, so a colour or
    size change re-bakes the sprites without disturbing the field the
@@ -906,7 +939,7 @@ async function boot(){
     if(!imgs[i]) return;
     ASSETS.push({...a, img: imgs[i], stemSrc: a.stem});
   });
-  DPR = pickDPR();          // ensureBake reads this
+  DPR = pickDPR(); updateTypeScale();   // ensureBake reads both
   rebakePlants();
   rebakeGround();
   applyMark();
@@ -991,7 +1024,13 @@ function seed(){
      anything above that was inert. Raised so the top of the slider
      actually means something; the governor is what protects frame rate,
      not this. */
-  const target = Math.min(8000, Math.max(260, Math.round(W*H/700*P.density)));
+  /* Divided by the meadow scale SQUARED, so shrinking the plants on a
+     narrow screen does not thin the field: sprite area goes as the
+     square, so the count has to rise by the same factor to hold the same
+     coverage. Total fill per frame is unchanged -- it is the same number
+     of painted pixels, spread over more and smaller plants. */
+  const target = Math.min(8000, Math.max(260,
+    Math.round(W*H/700*P.density / (typeScl*typeScl))));
 
   /* Grass-only zones. Type sits badly on a bed of flowers -- too much
      colour and too much silhouette right where the eye needs to resolve
@@ -1027,6 +1066,19 @@ function seed(){
      growing under them. data-bare is nothing at all, linen showing
      through -- every link on the site, so a menu reads as cleared ground
      rather than as words lying in a flower bed. */
+  /* Only a plant's CENTRE is tested against a zone, so a clearing
+     narrower than a bloom cannot actually keep one off the type -- the
+     plant is correctly excluded and still covers the words. Floor every
+     semi-axis at half-box + half-bloom, the smallest ellipse that can do
+     the job. Measured off the assets rather than hardcoded, so it tracks
+     P.size and the meadow scale. Where the proportional pad is already
+     bigger -- any laptop width -- this changes nothing at all. */
+  const bl = ASSETS.filter(a => a.role !== 'grass' && a.role !== 'stem');
+  const TYPICAL = 0.9;                  // the field's usual per-plant scale
+  const mean = f => bl.length ? bl.reduce((t,a)=>t+f(a), 0)/bl.length : 0;
+  const bhw = TYPICAL * 0.5 * mean(a=>a.dw);
+  const bhh = TYPICAL * 0.5 * mean(a=>a.dh);
+
   const zones = [], bareZones = [];
   document.querySelectorAll('[data-zone],[data-bare]').forEach(el=>{
     const r = el.getBoundingClientRect();
@@ -1034,11 +1086,12 @@ function seed(){
     const fs = parseFloat(getComputedStyle(el).fontSize) || 16;
     const isBare = el.hasAttribute('data-bare');
     const k = parseFloat(isBare ? el.dataset.bare : el.dataset.zone) || 1;
+    const hw = r.width/2, hh = r.height/2;
     (isBare ? bareZones : zones).push({
-      x: r.left + r.width/2,  y: r.top + r.height/2,
-      ax: (r.width/2 + fs*ZONE_PAD_X) * k,
-      ay: (r.height/2 + fs*ZONE_PAD_Y) * k,
-      up: (r.height/2 + fs*ZONE_PAD_Y*ZONE_TOP) * k
+      x: r.left + hw,  y: r.top + hh,
+      ax: Math.max((hw + fs*ZONE_PAD_X) * k,          hw + bhw),
+      ay: Math.max((hh + fs*ZONE_PAD_Y) * k,          hh + bhh),
+      up: Math.max((hh + fs*ZONE_PAD_Y*ZONE_TOP) * k, hh + bhh)
     });
   });
 
@@ -1090,7 +1143,7 @@ function seed(){
   const rise = (a, sc)=>(a.dh*0.55 + a.stem) * sc;
   /* Multiplier on the clearing's natural grass density. Above 1 the
      pass sows more, below 1 it thins -- 1.20 was too thick. */
-  const ZONE_GRASS = 0.84;
+  const ZONE_GRASS = 0.15;
 
   const CELL = 16, grid = new Map();
   function crowded(x,y,r){
@@ -1289,7 +1342,8 @@ addEventListener('hashchange', ()=>showView(viewFromHash(), true));
 function resize(){
   const wasDPR = DPR;
   DPR = pickDPR();
-  if(DPR !== wasDPR && ASSETS.length) rebakePlants();
+  const sclChanged = updateTypeScale();
+  if((DPR !== wasDPR || sclChanged) && ASSETS.length) rebakePlants();
   W = innerWidth; H = innerHeight;
   canvas.width = Math.round(W*DPR); canvas.height = Math.round(H*DPR);
   canvas.style.width = W+'px'; canvas.style.height = H+'px';

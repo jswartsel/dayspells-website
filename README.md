@@ -153,9 +153,34 @@ not a side effect to be tolerated but the transition itself: the meadow
 grows in from `sizeFrom` around whatever type has just arrived.
 
 The nav holds **one line in landscape and one link per row in portrait**.
-Landscape needs a cap on the type size to manage it (`min(--type * .54,
-4.2vw)`) — the ratio alone outgrows the window below about 1150px and
-the row wraps 3+1, which reads like an accident.
+Landscape needs a cap on the type size to manage it (`min(--type * .48,
+3.7vw)`) — the ratio alone outgrows the window at some width whatever it
+is set to, and the row wraps 3+1, which reads like an accident. The
+listen page's links are set with the same expression, cap and all, so
+the two menus are one size.
+
+## Meadow scale
+
+**A sprite is a fixed number of pixels wherever it is drawn** — `P.size`
+and `SHRINK` have no viewport term — but the type is set in `vw`. So the
+meadow used to be drawn at full desktop size against phone type less
+than half as tall, and every relationship tuned at 1440 came out wrong at
+390: the clearings ended up *smaller than a single bloom*, which is why
+they looked like they were doing nothing there.
+
+So the plants ride the same ramp the type does, referenced to the size it
+was all tuned at, and read off the wordmark rather than re-stating the
+CSS clamp so the two cannot drift apart. The plant target is then divided
+by that scale **squared** — sprite area goes as the square, so without it
+shrinking the plants would thin the field into visible linen. Measured at
+390×844: scale 0.418, blooms 23×25px instead of 55×60, 4806 plants
+instead of 843, overdraw 7.2× against the laptop's 6.4× — the same
+painted-pixel budget spread over more and smaller plants, and the same
+picture at both widths.
+
+The cost is on the CPU, not the GPU: five times the plants means five
+times the physics and five times the transforms. That is the change most
+likely to bite on a real phone, and `autothin` is off.
 
 ## Zones
 
@@ -165,8 +190,22 @@ every piece of type gets a clearing, in one of two kinds:
 
 | attribute | |
 |---|---|
-| `data-zone` | **grass only** — no blooms, no stems, and full grass weight regardless of what the `mix` sliders say. The wordmark, and the sub-pages' one-line messages. |
-| `data-bare` | **nothing at all**, linen showing through. Every link on the site, so a menu reads as cleared ground rather than as words lying in a flower bed. |
+| `data-zone` | **grass only** — no blooms, no stems, and full grass weight regardless of what the `mix` sliders say. The wordmark, the sub-pages' messages, and every menu link. |
+| `data-bare` | **nothing at all**, linen showing through. Currently only the back caret. |
+
+The attribute's **value scales the ellipse**. The four nav links carry
+`1.25`, enough that in landscape their clearings overlap into one
+continuous strip rather than four separate patches — at 1440px the edges
+overlap by 23–38px. With `ZONE_GRASS` down at 0.15 that strip is nearly
+bare anyway, so the menus read much as they did when they were literally
+`data-bare`; the difference is that a few blades still come through.
+
+**Every semi-axis is floored at `half-box + half-bloom`.** Only a
+plant's *centre* is tested against a zone, so a clearing narrower than a
+bloom cannot actually keep one off the type — the plant is correctly
+excluded and still covers the words. The floor is measured off the
+assets, so it tracks `P.size` and the meadow scale. At laptop widths the
+proportional pad is already larger and the floor changes nothing.
 
 A grass zone is not a hole in the field, it is a different planting; a
 bare one is a hole, and meant to be.
@@ -218,7 +257,7 @@ measures empty, across all four pages at laptop, phone and
 landscape-phone size.
 
 The grass clearings fill only with whatever clusters happen to centre
-inside them, so a top-up pass brings them to `ZONE_GRASS` (0.84) of their
+inside them, so a top-up pass brings them to `ZONE_GRASS` (0.15) of their
 natural density — sowing single blades when the target is above 1,
 thinning at random when it is below. Which zone a blade goes to is
 picked by **area**, or a small ellipse would get as many blades as the

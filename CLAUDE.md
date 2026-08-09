@@ -56,11 +56,11 @@ first for what the project is and how to run it.
   carrying `data-zone` (grass only) or `data-bare` (nothing at all)
   contributes an ellipse around its own box, so four nav links and three
   stacked links cost nothing per page and hidden pages drop out on their
-  own (a `display:none` box measures 0×0). The split is by role, not by
-  page: **every link is bare, the wordmark and the sub-page messages are
-  grass.** A menu should read as cleared ground; the wordmark wants
-  something growing under it. Three things had to be right for this to
-  hold up:
+  own (a `display:none` box measures 0×0). Nearly everything is a grass
+  zone now, with `ZONE_GRASS` at 0.15 doing the work instead: a clearing
+  keeps 15% of the grass that lands in it, which reads much as bare linen
+  did but still lets a few blades through. Only the back caret is
+  `data-bare`. Three things had to be right for this to hold up:
   - **The attribute goes on an inline span.** A block stretches to its
     widest sibling, so the `h1` measured the *nav row's* width and the
     wordmark got a clearing half the screen wide. An inline box is the
@@ -104,7 +104,7 @@ first for what the project is and how to run it.
   there in the file.
 - **The nav needs a vw cap to hold one line.** At a plain ratio of the
   wordmark the four links outgrow the window below ~1150px and wrap 3+1,
-  which reads like an accident. `min(--type * .54, 4.2vw)` holds one row
+  which reads like an accident. `min(--type * .48, 3.7vw)` holds one row
   through every landscape size measured; portrait goes to one per row.
 - **Changing page resows.** The clearings belong to the type on screen,
   so it is the transition rather than a cost — the field grows in from
@@ -134,6 +134,21 @@ first for what the project is and how to run it.
   waits for the grow-in to finish, since two scale ramps at once fight
   each other. Mean sprite *area* comes out slightly below rest, so there
   is no overdraw cost: 61fps idle, 61fps breathing, headed.
+- **The meadow scales with the type, and the count with its square.**
+  A sprite is a fixed number of pixels wherever it is drawn; the type is
+  set in vw. So on a phone the field was full desktop size against type
+  less than half as tall, and the clearings came out *smaller than a
+  single bloom* — a plant was correctly excluded from a zone and still
+  covered the words, because only its centre is tested. Plants now ride
+  the same ramp `--type` does, read off the wordmark so the CSS and the
+  JS cannot drift. The plant target is divided by that scale **squared**:
+  sprite area goes as the square, so without it the field thins into
+  visible linen. Measured at 390×844: scale 0.418, 4806 plants against
+  843, overdraw 7.2x against the laptop's 6.4x. Fill is unchanged but
+  per-plant CPU is 5x — the thing most likely to bite on a real phone.
+- **Zone semi-axes are floored at `half-box + half-bloom`.** The smallest
+  ellipse that can actually keep a bloom off the type, given that only
+  the centre is tested. Measured off the assets so it tracks `P.size`.
 - **Colour grade is baked into the assets** (`config.GRADE`), not applied
   as a CSS `filter` on the canvas. A compositor filter over a full-screen
   canvas costs on every frame; this costs nothing.
