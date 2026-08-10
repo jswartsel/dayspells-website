@@ -339,6 +339,20 @@ first for what the project is and how to run it.
   not match the name, so a name nothing claims hides every page at once.
   Do not "fix" it by adding a `data-view="viz"` element -- that would put
   a box back on screen and give the zone pass something to measure.
+- **The visualizer BORROWS globals, it does not own them.** `P.grow`,
+  `P.size` and `P.ghostOn` are all saved on the way into `#viz` and put
+  back on the way out, each behind a `viz*Was === null` guard so
+  re-entering cannot save a borrowed value over the real one. The
+  consequence to remember: a slider dragged while in the visualizer is
+  discarded when you leave, because the restore wins. That is the
+  contract, not a bug.
+- **`P.size` is geometry, and borrowing it has to re-bake.** Unlike the
+  gains, which are colour, `ensureBake` derives `a.dw`/`a.dh`/`a.stem`
+  from `SHRINK * P.size`, so changing it without `rebakePlants()` leaves
+  every sprite at the old dimensions. It also feeds the zone floor and
+  the crowding grid, which is why its panel control carries `rg:1` as
+  well as `cost:'plants'` -- the sprites re-bake immediately and the
+  field resows a beat later.
 - **`P.ghostOn` is flipped through `setGhost()` and nowhere else.** Four
   things want to change it -- the checkbox, a real pointer arriving, the
   idle timer, and the visualizer borrowing it -- and they will disagree

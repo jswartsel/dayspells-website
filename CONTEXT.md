@@ -163,11 +163,14 @@ the canvas, which has no size earlier).
   them. A 6×4 grid drives re-aiming at stale cells so it covers the
   screen. Measured over 45s: 21/24 cells, 8.1 screen-widths, 90–236
   px/s, 10 edge frames in 2700. Replaces the `ghost` Lissajous.
-- **Resows itself** every 15–20s, counted in the frame loop so a
+- **Resows itself** every 45–60s, counted in the frame loop so a
   backgrounded tab does not bank a burst of them.
-- **Grow-in is 5s here**, not the site's 6. Measured: 5s growing then
-  11–13s of settled field per cycle, which is the window breathing
-  gets. `P.grow` is borrowed and restored on exit.
+- **Two settings are borrowed and restored on exit**: `P.grow` at 5s
+  (the ramp is the field arriving, not the thing being watched) and
+  `P.size` at 1.275, a quarter under the site's 1.70 — smaller blooms
+  let the scatter and the glades read as landscape rather than texture.
+  Size is geometry, not colour, so borrowing it re-bakes the plants both
+  ways: a bloom is 46×61px here against 61×82 on the site.
 
 `/viz` is a redirect stub at `viz/index.html`; GitHub Pages has no
 rewrites, so the alternative was a second copy of the whole engine at
@@ -241,6 +244,7 @@ Corner links **wander · regrow · mod**. `c` toggles, `Esc` closes,
 | **rustle** | amount (0–8) |
 | **wander** | speed |
 | **meadow** | ground hue/sat/gain, plant hue/sat/gain, ground zoom, density |
+| **grow in** | final size, seconds |
 | **ghost** | enable, speed — the automated hand, on any page |
 | **plant mix** | purple / white / yellow / pink flwrs, grass |
 
@@ -267,7 +271,8 @@ the same job; `tune()` with no argument returns the current set.
 
 Several of these no longer have controls but are still live and still
 returned by `tune()`: `speed`, `settle`, `radius`, `bgTint`, `fgTint`,
-`markSize`, `markColor`, `sizeFrom`, `size`, `grow`, `autothin`.
+`markSize`, `markColor`, `sizeFrom`, `autothin`. (`size` and `grow` are
+back in the panel under **grow in**.)
 `bgGain` **does** have a slider now (`ground gain`, 0.2–2), which is the
 one to reach for when ground hue seems unresponsive — the 1.22 default
 is already past the ~1.2 where the clamp starts eating `bgHue`.

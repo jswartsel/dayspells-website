@@ -1692,11 +1692,15 @@ function showView(name, resow){
      over the real one. */
   if(viz){
     if(vizGrowWas === null){ vizGrowWas = P.grow; P.grow = VIZ_GROW; }
+    if(vizSizeWas === null){ vizSizeWas = P.size; P.size = VIZ_SIZE; rebakePlants(); }
     if(vizGhostWas === null){ vizGhostWas = P.ghostOn; ghostMuted = false; setGhost(true); }
+    syncPanel();
     resetViz();
-  }else if(vizGrowWas !== null || vizGhostWas !== null){
+  }else if(vizGrowWas !== null || vizSizeWas !== null || vizGhostWas !== null){
     if(vizGrowWas !== null){ P.grow = vizGrowWas; vizGrowWas = null; }
+    if(vizSizeWas !== null){ P.size = vizSizeWas; vizSizeWas = null; rebakePlants(); }
     if(vizGhostWas !== null){ setGhost(!!vizGhostWas); vizGhostWas = null; }
+    syncPanel();
   }
   if(resow && booted) regrowNow();
   /* Deferred past boot on a cold load of #viz: setWander reads the
@@ -1956,15 +1960,23 @@ function stepDoodle(dt){
    loop rather than on a timer, so it advances with drawn time: a
    backgrounded tab does not queue up a burst of regrows to run the
    moment it comes back. */
-const VIZ_REGROW = [15, 20];         // seconds between resows
-/* A touch quicker than the site's 6. At a resow every 15-20s the
-   grow-in has to be done well inside the cycle -- at 10s it was most of
-   what you ever saw, and the field barely had time to stand still
-   before being replaced. At 5 it reads as the field arriving rather
-   than as a permanent state. Saved and restored around the mode,
-   because P.grow is global and travels in tune(). */
+const VIZ_REGROW = [45, 60];         // seconds between resows
+/* A touch quicker than the site's 6, and it stayed at 5 when the resow
+   cycle stretched to 45-60s. The ramp is the field arriving, not the
+   thing you are watching -- at 10s it was most of what you ever saw
+   even on a short cycle. On a long one it is a brief opening and then
+   the better part of a minute of settled field, which is where the
+   wander and the breathing actually show. Saved and restored around the
+   mode, because P.grow is global and travels in tune(). */
 const VIZ_GROW = 5;
-let vizRegrowIn = 0, vizGrowWas = null, vizGhostWas = null;
+/* A quarter under the site's 1.70. The visualizer is watched rather than
+   read, and at full size the blooms crowd the frame -- smaller ones let
+   the scatter and the glades read as landscape instead of as texture.
+   Borrowed and restored like P.grow, and it needs a re-bake on the way
+   in and out: sprites are baked AT this size, so unlike the gains it is
+   geometry rather than colour. */
+const VIZ_SIZE = 1.275;
+let vizRegrowIn = 0, vizGrowWas = null, vizGhostWas = null, vizSizeWas = null;
 
 function resetViz(){
   vizRegrowIn = rnd(VIZ_REGROW[0], VIZ_REGROW[1]);
@@ -2168,6 +2180,19 @@ const CONTROLS = [
   {k:'fgGain',  l:'plant gain', min:0.2, max:2, step:0.01, cost:'plants'},
   {k:'ground',  l:'ground zoom', min:0.12, max:1.5, step:0.01, cost:'ground'},
   {k:'density', l:'density',  min:0.2,  max:4,   step:0.05, cost:'regrow', rg:1},
+  /* Back in the panel after a spell as tune()-only. `final size` is the
+     size sprites are BAKED at -- ensureBake derives a.dw/a.dh/a.stem
+     from SHRINK * P.size -- so it carries cost:'plants' to re-bake the
+     geometry, and rg:1 because the zone floor and the crowding grid are
+     both measured off those baked dimensions and want a fresh sow.
+     `seconds` is only the ramp's duration, but it queues a resow too,
+     since the ramp it changes has already finished by the time you let
+     go of the slider and there would otherwise be nothing to see.
+     The step is 0.025 rather than 0.05 so the visualizer's borrowed
+     1.275 lands exactly on a stop. */
+  {grp:'grow in'},
+  {k:'size',    l:'final size', min:0.4, max:3, step:0.025, cost:'plants', rg:1},
+  {k:'grow',    l:'seconds',    min:0,   max:20, step:0.5,  rg:1},
   /* The automated hand gets a group of its own rather than living under
      rustle, because it is not a property of the brush -- it is a second
      thing holding it. Reachable on every page, so the doodle can be

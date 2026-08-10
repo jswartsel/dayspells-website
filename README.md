@@ -307,15 +307,25 @@ brush back, and after `GHOST_IDLE` of stillness the hand resumes —
 unless the checkbox was deliberately unchecked, which `ghostMuted` keeps
 distinct from a pointer simply arriving.
 
-**It resows itself** every 15–20s, counted in the frame loop rather than
+**It resows itself** every 45–60s, counted in the frame loop rather than
 on a timer, so a backgrounded tab does not queue up a burst of regrows
-to run the moment it comes back. The **grow-in runs at 5s** here rather
-than the site's 6 — at 10 it was most of what you ever saw and the field
-barely stood still before being replaced; at 5 it reads as the field
-arriving rather than as a permanent state. Measured across live cycles:
-5s of grow-in then 11–13s of settled field, which is also the window
-breathing gets. `P.grow` is global and travels in `tune()`, so the mode
-borrows it — saved on the way in, restored on the way out.
+to run the moment it comes back.
+
+Two settings are **borrowed** for the mode and restored on the way out,
+since both are global and travel in `tune()`:
+
+- **grow-in at 5s** rather than the site's 6. The ramp is the field
+  arriving, not the thing you are watching — at 10s it was most of what
+  you ever saw. On a 45–60s cycle it is a brief opening and then the
+  better part of a minute of settled field, which is where the wander
+  and the breathing actually show.
+- **final size at 1.275**, a quarter under the site's 1.70. The
+  visualizer is watched rather than read, and at full size the blooms
+  crowd the frame; smaller ones let the scatter and the glades read as
+  landscape instead of as texture. Unlike the gains this is *geometry* —
+  sprites are baked at `P.size`, so `ensureBake` derives `a.dw`/`a.dh`
+  from it — which is why borrowing it re-bakes the plants both ways. A
+  bloom measures 46×61px here against 61×82 on the site.
 
 `/viz` is a redirect stub at `viz/index.html`. The site is one file and
 GitHub Pages has no rewrites, so a real page at that path would mean
@@ -603,6 +613,7 @@ around words that are no longer there.
 | **rustle** | amount (0–8; the drawn swing saturates at ~73° from 4 up, see below) |
 | **wander** | speed of the colour drift |
 | **meadow** | ground hue, ground sat, ground gain, plant hue, plant sat, plant gain, ground zoom, density |
+| **grow in** | final size, seconds |
 | **ghost** | enable, speed — the automated hand, on any page |
 | **plant mix** | relative amount of purple / white / yellow / pink flwrs, and grass |
 | | a live fps / drawn / quality readout |
@@ -614,7 +625,8 @@ paste-it-back-into-`DEFAULTS` workflow is otherwise unchanged.
 
 Several settings are live in `P` and travel in `tune()` but no longer
 have controls: `speed`, `settle` and `radius` (rustle), `bgTint` and
-`fgTint`, `markSize` and `markColor` (the type), and `autothin`.
+`fgTint`, `markSize` and `markColor` (the type), `sizeFrom` (the
+grow-in's start size), and `autothin`.
 Reach them with `tune({…})`. One is worth knowing about:
 
 - **`autothin` is 0**, so the governor is off and nothing thins the
