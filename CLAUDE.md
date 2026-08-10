@@ -315,6 +315,20 @@ first for what the project is and how to run it.
   not match the name, so a name nothing claims hides every page at once.
   Do not "fix" it by adding a `data-view="viz"` element -- that would put
   a box back on screen and give the zone pass something to measure.
+- **A doodling hand is a PEN, not a sequence of hops, and its curvature
+  must be SET rather than integrated.** Two wrong versions: point-to-
+  point with rests read as isolated twitches (what makes a doodle human
+  is that it never stops and never goes straight); then a damped random
+  walk on angular velocity, `w += noise*dt` with 0.90 per-frame decay,
+  which settles at a standard deviation of ~0.07 rad/s -- four degrees
+  of turn per second, measured as a chord-over-length of 0.99, i.e. a
+  straight line. Three summed sines instead, so `DOODLE_CURL` is a plain
+  rad/s and is frame-rate independent. Two more traps in the same
+  function: the target pull must SATURATE, or a 180-degree course error
+  asks for pi*PULL rad/s and the pen spins on the spot; and the edges
+  must REFLECT, not clamp, or a steeply-arriving pen keeps its heading
+  and slides along the wall -- a 400px straight line across the top of
+  the screen, which is the one shape that gives it away as a machine.
 - **The visualizer's hand writes `ptr.x/y` and nothing else.** The frame
   loop differences those into a smoothed velocity, so rustle, brush
   radius and trailing overshoot all behave exactly as under a real hand.

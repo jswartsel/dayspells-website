@@ -1649,7 +1649,16 @@ function showView(name, resow){
   viz = name === 'viz';
   document.body.classList.toggle('viz', viz);
   document.getElementById('back').hidden = name === 'home' || viz;
-  if(viz) resetViz();
+  /* P.grow is global and travels in tune(), so the visualizer borrows it
+     rather than owning it: saved on the way in, put back on the way out.
+     Guarded both ways so re-entering does not save the borrowed value
+     over the real one. */
+  if(viz){
+    if(vizGrowWas === null){ vizGrowWas = P.grow; P.grow = VIZ_GROW; }
+    resetViz();
+  }else if(vizGrowWas !== null){
+    P.grow = vizGrowWas; vizGrowWas = null;
+  }
   if(resow && booted) regrowNow();
   /* Deferred past boot on a cold load of #viz: setWander reads the
      canvas to pick the wordmark's contrast colour, and at this point in
@@ -1712,8 +1721,9 @@ addEventListener('pointerleave', ()=>{ ptr.live=false; ptr.x=ptr.y=-9999; });
 setTimeout(()=>{ if(!ptr.touched && !viz){ ghost.on=true; ptr.live=true; hint.dataset.done='true'; } }, 3200);
 
 /* ---------- the visualizer's hand --------------------------------- */
-/* The visualizer drives the brush itself: a slow doodle that strokes
-   somewhere new every few seconds and rests in between.
+/* The visualizer drives the brush itself: one continuous doodle, the
+   way somebody idly playing with the page would move -- long curving
+   squiggles that wander over the whole screen and never quite stop.
 
    It writes ptr.x/y and nothing else, which is the point -- the frame
    loop already differences those into a smoothed velocity, so the
@@ -1724,73 +1734,159 @@ setTimeout(()=>{ if(!ptr.touched && !viz){ ghost.on=true; ptr.live=true; hint.da
    This replaces `ghost` rather than joining it. The Lissajous gust is a
    demo of what the page does for someone who has not touched it; it
    sweeps the same figure forever, which is fine for eight seconds and
-   obvious on a screen left running. A doodle that picks a new direction
-   each time does not repeat.
+   obvious on a screen left running.
 
-   Stroke length is a share of the SHORT side, not the diagonal, so the
-   stroke covers a comparable amount of what you can see on any shape of
-   window. Smoothstepped, so a stroke accelerates and settles rather
-   than starting and stopping at full speed -- with linear easing the
-   velocity is a step function and the field snaps at each end. */
-const DOODLE_REACH = [0.15, 0.25];   // share of min(W,H) per stroke
-const DOODLE_DRAW  = [1.6, 3.2];     // s to walk one stroke
-const DOODLE_REST  = [1.5, 4.0];     // s of stillness between strokes
-/* Random, but never twice down the same line: each stroke turns at
-   least this far off the last one, so the hand cannot pace a groove. */
-const DOODLE_TURN  = 0.7;            // radians, minimum course change
+   THE FIRST VERSION OF THIS WAS WRONG, and the failure is worth
+   keeping. It moved point to point: pick a target a short hop away,
+   ease to it, stop, rest a second or two, repeat. Every ingredient was
+   reasonable and it read as a series of little isolated twitches,
+   because what makes a doodle look human is not where it goes but that
+   it never stops and never travels straight. So the model is a PEN
+   now, not a sequence of hops:
 
-const doodle = {on:false, x:0, y:0, fx:0, fy:0, tx:0, ty:0,
-                t:0, dur:0, resting:true, head:Math.random()*Math.PI*2};
+   - It always has a velocity. There are no rests, only slow stretches:
+     speed re-rolls every few seconds and eases toward the new value, so
+     the hand dawdles and surges without the field settling completely.
+   - It steers, it does not aim. Heading is integrated from an angular
+     velocity, itself driven by an aimless curl plus a pull toward
+     wherever it is headed. Continuous curvature is what makes a path a
+     squiggle; interpolating between points cannot produce it.
+   - It is made to cover the screen. Left to curl freely a random walk
+     loiters, and the page would go minutes with a whole side untouched.
+     A coarse grid records when each cell was last visited and the pen
+     re-aims at a stale one every few seconds -- picked as the oldest of
+     five random cells rather than the oldest overall, because always
+     taking the oldest turns it into a lawnmower sweeping in order.
+     Biased toward coverage, still unpredictable. */
+/* Curvature is SET, not integrated. The first attempt built the angular
+   velocity out of a damped random walk -- w += noise*dt each frame, with
+   a per-frame decay -- and the arithmetic of that is a trap: with a 0.90
+   decay the walk settles at a standard deviation of about 0.07 rad/s,
+   which is four degrees of turn in a whole second. Measured, the path
+   came out at a chord-over-length of 0.99 over one-second windows, i.e.
+   a straight line. Reaching a usable turn rate that way needs a noise
+   term around 68 rad/s^2, at which point the constant means nothing to
+   anybody reading it and the result is frame-rate dependent besides.
+
+   So the aimless part is three sines at incommensurate rates, summed.
+   That is bounded, smooth, frame-rate independent, and DOODLE_CURL is
+   then a plain "how many radians per second does it bend", which is the
+   number you actually want to tune. The phases re-roll per reset so it
+   does not retrace the same figure -- which was the whole complaint
+   about the Lissajous ghost. */
+const DOODLE_SPEED = [0.09, 0.30];   // share of min(W,H) travelled per second
+const DOODLE_GUST  = [1.8, 4.0];     // s between speed re-rolls
+const DOODLE_CURL  = 0.95;           // rad/s of aimless bend at full swing
+const DOODLE_PULL  = 0.80;           // rad/s toward the area it is heading for
+const DOODLE_TURN  = 2.20;           // rad/s ceiling, so bends stay broad
+const DOODLE_AIM   = [2.5, 5.5];     // s before it picks a new area
+const DOODLE_CELLS = [6, 4];         // coverage grid
+const DOODLE_EDGE  = 0.14;           // share of span kept clear of the edges
+
+const doodle = {
+  x:0, y:0, head:0, w:0, spd:0, want:0, clock:0,
+  aimT:0, aimFor:0, gustT:0, gustFor:0, tx:0, ty:0,
+  ph:[0,0,0],
+  seen:new Float32Array(DOODLE_CELLS[0]*DOODLE_CELLS[1])
+};
+
+function doodleCell(x, y){
+  const cx = Math.max(0, Math.min(DOODLE_CELLS[0]-1, (x/W*DOODLE_CELLS[0])|0));
+  const cy = Math.max(0, Math.min(DOODLE_CELLS[1]-1, (y/H*DOODLE_CELLS[1])|0));
+  return cy*DOODLE_CELLS[0] + cx;
+}
 
 function doodleAim(){
-  const span = Math.min(W, H);
-  const reach = rnd(DOODLE_REACH[0], DOODLE_REACH[1]) * span;
-  /* Turn by at least DOODLE_TURN, either way, then a free spread on top. */
-  const turn = (DOODLE_TURN + Math.random() * (Math.PI - DOODLE_TURN))
-             * (Math.random() < 0.5 ? -1 : 1);
-  for(let tries = 0; tries < 12; tries++){
-    const h = doodle.head + turn + rnd(-0.35, 0.35);
-    const tx = doodle.x + Math.cos(h) * reach;
-    const ty = doodle.y + Math.sin(h) * reach;
-    /* Inset rather than clamped: clamping to the edge would let the hand
-       slide along it, which reads as a machine tracing the frame. */
-    const m = span * 0.06;
-    if(tx > m && tx < W - m && ty > m && ty < H - m){
-      doodle.head = h; doodle.tx = tx; doodle.ty = ty; return;
-    }
+  const n = doodle.seen.length;
+  let at = (Math.random()*n)|0, age = doodle.clock - doodle.seen[at];
+  for(let k=1;k<5;k++){
+    const i = (Math.random()*n)|0, a = doodle.clock - doodle.seen[i];
+    if(a > age){ age = a; at = i; }
   }
-  /* Boxed in near a corner -- aim back at the middle instead. */
-  doodle.head = Math.atan2(H/2 - doodle.y, W/2 - doodle.x);
-  doodle.tx = doodle.x + Math.cos(doodle.head) * reach;
-  doodle.ty = doodle.y + Math.sin(doodle.head) * reach;
+  const cx = at % DOODLE_CELLS[0], cy = (at / DOODLE_CELLS[0])|0;
+  doodle.tx = (cx + rnd(0.2, 0.8)) / DOODLE_CELLS[0] * W;
+  doodle.ty = (cy + rnd(0.2, 0.8)) / DOODLE_CELLS[1] * H;
+  doodle.aimT = 0;
+  doodle.aimFor = rnd(DOODLE_AIM[0], DOODLE_AIM[1]);
 }
 
 function resetDoodle(){
-  doodle.x = doodle.fx = rnd(0.3, 0.7) * W;
-  doodle.y = doodle.fy = rnd(0.3, 0.7) * H;
-  doodle.resting = true; doodle.t = 0;
-  doodle.dur = rnd(DOODLE_REST[0], DOODLE_REST[1]);
+  doodle.x = rnd(0.3, 0.7) * W;
+  doodle.y = rnd(0.3, 0.7) * H;
+  doodle.head = Math.random() * Math.PI * 2;
+  doodle.w = 0; doodle.clock = 0;
+  doodle.ph = [Math.random()*7, Math.random()*7, Math.random()*7];
+  doodle.seen.fill(0);
+  doodle.spd = doodle.want = rnd(DOODLE_SPEED[0], DOODLE_SPEED[1]) * Math.min(W, H);
+  doodle.gustT = 0; doodle.gustFor = rnd(DOODLE_GUST[0], DOODLE_GUST[1]);
+  doodleAim();
 }
 
 function stepDoodle(dt){
-  doodle.t += dt;
-  if(doodle.resting){
-    if(doodle.t >= doodle.dur){
-      doodle.resting = false; doodle.t = 0;
-      doodle.dur = rnd(DOODLE_DRAW[0], DOODLE_DRAW[1]);
-      doodle.fx = doodle.x; doodle.fy = doodle.y;
-      doodleAim();
-    }
-  }else{
-    const u = smooth(doodle.t / doodle.dur);
-    doodle.x = doodle.fx + (doodle.tx - doodle.fx) * u;
-    doodle.y = doodle.fy + (doodle.ty - doodle.fy) * u;
-    if(doodle.t >= doodle.dur){
-      doodle.x = doodle.tx; doodle.y = doodle.ty;
-      doodle.resting = true; doodle.t = 0;
-      doodle.dur = rnd(DOODLE_REST[0], DOODLE_REST[1]);
-    }
+  if(W < 2 || H < 2) return;
+  const span = Math.min(W, H);
+  doodle.clock += dt;
+  doodle.seen[doodleCell(doodle.x, doodle.y)] = doodle.clock;
+
+  doodle.aimT += dt;
+  if(doodle.aimT >= doodle.aimFor) doodleAim();
+
+  doodle.gustT += dt;
+  if(doodle.gustT >= doodle.gustFor){
+    doodle.gustT = 0;
+    doodle.gustFor = rnd(DOODLE_GUST[0], DOODLE_GUST[1]);
+    doodle.want = rnd(DOODLE_SPEED[0], DOODLE_SPEED[1]) * span;
   }
+  doodle.spd += (doodle.want - doodle.spd) * Math.min(1, dt*1.2);
+
+  /* Where it would like to be pointing: at its target, bent toward the
+     middle as it nears an edge. Without that second term a hard curl
+     can pin the pen against a wall and it slides along it, which reads
+     as a machine tracing the frame rather than as a hand. */
+  let ax = doodle.tx - doodle.x, ay = doodle.ty - doodle.y;
+  const m = span * DOODLE_EDGE;
+  const near = Math.max(0, (m - doodle.x)/m, (doodle.x - (W - m))/m,
+                           (m - doodle.y)/m, (doodle.y - (H - m))/m);
+  if(near > 0){
+    const bx = W/2 - doodle.x, by = H/2 - doodle.y;
+    const l1 = Math.hypot(ax, ay) || 1, l2 = Math.hypot(bx, by) || 1;
+    ax = ax/l1*(1 - near) + bx/l2*near*3;
+    ay = ay/l1*(1 - near) + by/l2*near*3;
+  }
+  let d = Math.atan2(ay, ax) - doodle.head;
+  d = Math.atan2(Math.sin(d), Math.cos(d));          // shortest way round
+
+  /* Three incommensurate sines, so the bend never settles into a period
+     short enough to notice. Swings about +-1.8, hence CURL being the
+     per-unit rate rather than the peak. */
+  const c = doodle.clock;
+  const curl = Math.sin(c*0.37 + doodle.ph[0]) * 0.8
+             + Math.sin(c*0.90 + doodle.ph[1]) * 0.6
+             + Math.sin(c*1.70 + doodle.ph[2]) * 0.4;
+  /* The pull SATURATES. Left proportional, a 180-degree course error
+     asks for pi*PULL rad/s and the pen snaps round on the spot, which
+     is the one motion a hand never makes. */
+  doodle.w = curl * DOODLE_CURL
+           + Math.max(-1, Math.min(1, d)) * DOODLE_PULL;
+  doodle.w = Math.max(-DOODLE_TURN, Math.min(DOODLE_TURN, doodle.w));
+  doodle.head += doodle.w * dt;
+
+  doodle.x += Math.cos(doodle.head) * doodle.spd * dt;
+  doodle.y += Math.sin(doodle.head) * doodle.spd * dt;
+
+  /* Reflect off the edge, do not just clamp to it. Clamping alone lets a
+     pen that arrives steeply keep its heading and slide along the wall,
+     and a dead-straight run down the side of the screen is the one shape
+     that gives the whole thing away as a machine -- it showed up as a
+     400px horizontal line across the top on the first trace. The soft
+     steering above means this almost never fires; it is the backstop for
+     arriving too fast to turn in time. */
+  const edge = 1;
+  if(doodle.x < edge){ doodle.x = edge; doodle.head = Math.PI - doodle.head; }
+  else if(doodle.x > W - edge){ doodle.x = W - edge; doodle.head = Math.PI - doodle.head; }
+  if(doodle.y < edge){ doodle.y = edge; doodle.head = -doodle.head; }
+  else if(doodle.y > H - edge){ doodle.y = H - edge; doodle.head = -doodle.head; }
+
   ptr.x = doodle.x; ptr.y = doodle.y;
 }
 
@@ -1798,8 +1894,14 @@ function stepDoodle(dt){
    loop rather than on a timer, so it advances with drawn time: a
    backgrounded tab does not queue up a burst of regrows to run the
    moment it comes back. */
-const VIZ_REGROW = [45, 90];         // seconds between resows
-let vizRegrowIn = 0;
+const VIZ_REGROW = [30, 40];         // seconds between resows
+/* The field takes longer to come up here than it does on the site. A
+   resow every half minute is most of what there is to watch, so the
+   grow-in is the show rather than something to get through. Saved and
+   restored around the mode, because P.grow is global and travels in
+   tune(). */
+const VIZ_GROW = 10;
+let vizRegrowIn = 0, vizGrowWas = null;
 
 function resetViz(){
   ghost.on = false;                  // the doodle takes the brush over
@@ -1807,6 +1909,7 @@ function resetViz(){
   resetDoodle();
   vizRegrowIn = rnd(VIZ_REGROW[0], VIZ_REGROW[1]);
 }
+
 
 function stepViz(dt){
   stepDoodle(dt);

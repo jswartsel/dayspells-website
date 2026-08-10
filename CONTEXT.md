@@ -148,12 +148,17 @@ the canvas, which has no size earlier).
   overlapping pairs in 2721, across 1280×800, 390×844 and 844×390.
 - **A doodle drives the brush.** It writes `ptr.x/y` and nothing else,
   so the frame loop differences it into velocity and the physics cannot
-  tell it from a hand. Strokes of 15–25% of the short side over
-  1.6–3.2s, resting 1.5–4.0s, each turning ≥ `DOODLE_TURN` off the last
-  so it cannot pace a groove. Replaces the `ghost` Lissajous, which
-  repeats visibly on a screen left running.
-- **Resows itself** every 45–90s, counted in the frame loop so a
+  tell it from a hand. A continuously-moving pen: curvature is **set**
+  from three summed sines (not integrated — a damped random walk
+  settles at 0.07 rad/s and draws a straight line), the pull toward its
+  target saturates, and it reflects off edges rather than sliding along
+  them. A 6×4 grid drives re-aiming at stale cells so it covers the
+  screen. Measured over 45s: 21/24 cells, 8.1 screen-widths, 90–236
+  px/s, 10 edge frames in 2700. Replaces the `ghost` Lissajous.
+- **Resows itself** every 30–40s, counted in the frame loop so a
   backgrounded tab does not bank a burst of them.
+- **Grow-in is 10s here**, not the site's 6 — the growing-in is most of
+  what there is to watch. `P.grow` is borrowed and restored on exit.
 
 `/viz` is a redirect stub at `viz/index.html`; GitHub Pages has no
 rewrites, so the alternative was a second copy of the whole engine at

@@ -237,22 +237,61 @@ across 200 draws each at 1280×800, 390×844 and 844×390.
 **A doodle drives the brush.** It writes `ptr.x/y` and nothing else,
 which is the point: the frame loop already differences those into a
 smoothed velocity, so the rustle, the brush radius and the trailing
-overshoot behave exactly as they do under a real hand. Strokes cover
-15–25% of the short side over 1.6–3.2s, with 1.5–4.0s of stillness
-between, smoothstepped so a stroke accelerates and settles instead of
-starting and stopping at full speed. Each stroke turns at least
-`DOODLE_TURN` off the last, so the hand cannot pace a groove. Measured:
-strokes of 16.8–22.9% over 2.05–3.00s, brushing on 47% of frames, peak
-pointer speed 2.09 px/frame, 60.1fps.
+overshoot behave exactly as they do under a real hand.
+
+It is a **pen**, not a sequence of hops — and getting there took two
+wrong versions worth recording, because each failed differently and
+neither was obvious from the code.
+
+The first moved point to point: pick a target a short hop away, ease to
+it, stop, rest a second, repeat. Every ingredient was reasonable and it
+read as *little isolated twitches*. What makes a doodle look human is
+not where it goes but that it never stops and never travels straight.
+
+The second fixed the stopping and not the straightness. Angular velocity
+came from a damped random walk, `w += noise·dt` with a 0.90 per-frame
+decay — which settles at a standard deviation of about **0.07 rad/s**,
+four degrees of turn in a whole second. Measured, the path came out at a
+chord-over-length of **0.99** over one-second windows: a straight line.
+Getting a usable bend that way needs a noise term around 68 rad/s², at
+which point the constant means nothing to anyone reading it and it is
+frame-rate dependent besides.
+
+So curvature is **set, not integrated**: three incommensurate sines
+summed, with `DOODLE_CURL` as a plain "radians per second of bend".
+Phases re-roll per reset so it never retraces a figure. The pull toward
+its target **saturates**, because left proportional a 180° course error
+asks for π·`PULL` rad/s and the pen snaps round on the spot — the one
+motion a hand never makes. And it **reflects** off the edges rather than
+clamping: clamping alone lets a steeply-arriving pen keep its heading
+and slide along the wall, and a dead-straight run down the side of the
+screen gives the whole thing away. That showed up as a 400px horizontal
+line across the top of the first trace.
+
+It is also **made to cover the screen**. Left to curl freely a random
+walk loiters and a whole side goes untouched for minutes. A 6×4 grid
+records when each cell was last visited and the pen re-aims at a stale
+one every few seconds — picked as the oldest of five random cells, not
+the oldest overall, which would turn it into a lawnmower sweeping in
+order.
+
+Measured over 45s at 1280×800: **21 of 24 cells visited**, 8.1 screen-
+widths of travel, speed 90–236 px/s (it never stops), chord-over-length
+0.96 / 0.88 / 0.79 over 1s / 2s / 4s windows, and **10 frames out of
+2700** anywhere near an edge.
 
 This **replaces** the `ghost` Lissajous rather than joining it. That gust
 is a demo for someone who has not touched the page — it sweeps the same
 figure forever, which is fine for eight seconds and obvious on a screen
 left running.
 
-**It resows itself** every 45–90s, counted in the frame loop rather than
+**It resows itself** every 30–40s, counted in the frame loop rather than
 on a timer, so a backgrounded tab does not queue up a burst of regrows
-to run the moment it comes back.
+to run the moment it comes back. The **grow-in runs at 10s** here rather
+than the site's 6: a resow every half minute means the growing-in is
+most of what there is to watch, so it is the show rather than something
+to get through. `P.grow` is global and travels in `tune()`, so the mode
+borrows it — saved on the way in, restored on the way out.
 
 `/viz` is a redirect stub at `viz/index.html`. The site is one file and
 GitHub Pages has no rewrites, so a real page at that path would mean
