@@ -798,12 +798,14 @@ function rebakeGround(){
 /* Four slow oscillators on the hue and saturation of ground and plants.
    The intervals are deliberately unequal so the four rarely line up, and
    the combinations drift somewhere neither of us would have chosen.
-   Simulated, at wanderSpeed 2: the walkers cycle in 36s, 28.8s, 45.5s
-   and 50.0s, and the exact four-value state repeats every 3.8 days.
-   (Those figures have moved twice -- the saturations when they were
-   slowed, from 27.3s and 37.5s, and ground hue when it was halved, from
-   18s. The repeat has landed back on ~3.8 days each time by
-   coincidence rather than design: 3.79 against 3.8.)
+   Simulated, at wanderSpeed 2: the walkers cycle in 42.4s, 28.8s, 45.5s
+   and 50.0s. (Those figures have moved as the walkers were tuned -- the
+   saturations from 27.3s and 37.5s, ground hue from 18s.) The exact
+   four-value repeat used to be a tidy ~3.8 days and is now far longer,
+   because 720/17 shares almost nothing with the other three; the
+   precise figure swings wildly with the last digit of these intervals,
+   so it is not worth quoting. What matters is unchanged: it is longer
+   than anyone will sit through by orders of magnitude.
    (An earlier version of this comment claimed four months, from primes
    43x59x71x89 that are not these intervals. See GAME.md for the full
    working. This is deterministic as a state machine AND, since the
@@ -839,16 +841,19 @@ function rebakeGround(){
    shook apart. It was left alone on purpose. What the unequal intervals
    are actually protecting is the SET of colour combinations the four
    walkers reach, and that is governed by their cycle lengths, not by
-   which frame they happen to fire on. Those are 36 / 28.8 / 45.5 / 50s,
-   whose LCM is still ~3.8 days, so the combination space is untouched;
+   which frame they happen to fire on. Those are 42.4 / 28.8 / 45.5 /
+   50s, whose repeat is longer than it has ever been, so the
+   combination space is untouched;
    two independent properties stepping in the same frame is not
    something anybody can see. Nudging this to 1.01 would buy nothing and
    would cost the exact 25% the plant saturation was slowed by. */
-/* Ground hue additionally runs at HALF the rate of everything else --
-   0.50 where the original was 0.25 -- which is why its numerator is the
-   odd one out. Only `every` was doubled, so the fine 5/3 step survives
-   and the ground drifts through the same hues at half the pace rather
-   than in coarser jumps. Its cycle goes 18s -> 36s.
+/* Ground hue additionally runs SLOWER than everything else, in two
+   passes: first halved (0.50 where the original was 0.25), then taken
+   down a further 15% (/0.85). Only `every` moved either time, so the
+   fine 5/3 step survives and the ground drifts through the same hues at
+   a lower pace rather than in coarser jumps. Its cycle went 18s -> 36s
+   -> 42.4s. Written as the arithmetic rather than as 0.196 so the two
+   deliberate slowdowns stay legible.
 
    The hues are written as `original / 3` on BOTH terms on purpose: that
    is the whole shape of the granularity change. Thirding `step` alone
@@ -864,7 +869,7 @@ function rebakeGround(){
    amortised becoming 0.31ms. Measured: 60.1fps before and after, worst
    frame 27ms before and 25.3ms after. */
 const WANDER = [
-  {k:'bgHue', step:5/3,  every:0.50/3, lo:0,  hi:360,  dir: 1, t:0, ground:1},
+  {k:'bgHue', step:5/3,  every:(0.50/0.85)/3, lo:0, hi:360, dir: 1, t:0, ground:1},
   {k:'fgHue', step:5/3,  every:0.40/3, lo:0,  hi:360,  dir:-1, t:0, ground:0},
   {k:'bgSat', step:0.06, every:1.083,  lo:0,  hi:2.5,  dir: 1, t:0, ground:1},
   {k:'fgSat', step:0.05, every:1.000,  lo:0,  hi:2.5,  dir:-1, t:0, ground:0}

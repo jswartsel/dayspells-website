@@ -208,7 +208,7 @@ by cluster. A density governor (`autothin`) exists but is **off**.
 
 ### wander
 Four hue/sat walkers on unequal intervals, stepped rather than
-continuous: `every` 0.1667 / 0.1333 (hues) and 1.083 / 1.000 (sats), divided
+continuous: `every` 0.1961 / 0.1333 (hues) and 1.083 / 1.000 (sats), divided
 by `wander speed`. The two saturations were slowed on purpose — ground
 sat to 0.60 of the rate it ran at, plant sat to 0.75 — via `every`, not
 `step`, because `every` is the rate term `wanderSpeed` already divides.
@@ -294,9 +294,11 @@ is already past the ~1.2 where the clamp starts eating `bgHue`.
   nominal, where ground hue used to be 6.7% slow. What still diverges
   from wall time is deliberate: `dt` is clamped to 1/30, and a
   backgrounded tab throttles rAF.
-- **Walker cycles at `wanderSpeed 2`:** ground hue 36s, ground sat 45.5s,
-  plant hue 28.8s, plant sat 50.0s; full state repeats every **~3.8
-  days**. The hue cycles are unchanged by the granularity change — step
+- **Walker cycles at `wanderSpeed 2`:** ground hue 42.4s, ground sat
+  45.5s, plant hue 28.8s, plant sat 50.0s. The full-state repeat was a
+  tidy ~3.8 days before ground hue was slowed; it is now far longer and
+  not worth quoting, since the figure swings on the last digit of the
+  intervals. The hue cycles are unchanged by the granularity change — step
   and interval were both divided by 3, so only the grain moved. (A
   comment in the file claiming "four months" is stale.)
 - **Hue granularity is free; only the ground pays.** `plantQueue` resets

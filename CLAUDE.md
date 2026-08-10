@@ -289,7 +289,11 @@ first for what the project is and how to run it.
   keeping the 5/3 step), so it drifts through the same hues at half the
   pace rather than in coarser jumps. Measured A/B, 40.1 deg/s -> 20.0,
   a ratio of 0.498, with plant hue untouched at 0.999. Its cycle went
-  18s -> 36s; the four-walker repeat stays at ~3.8 days.
+  18s -> 36s, and a later 15% took it to 42.4s (measured 20.09 deg/s
+  -> 17.02, a ratio of 0.847). The four-walker repeat used to be a tidy
+  ~3.8 days and is now far longer and not worth quoting -- 720/17 shares
+  almost nothing with the other three cycles, so the figure swings on
+  the last digit of the intervals.
 - **Read a slider's value BEFORE calling `setWander(false)`.** The
   takeover in the `input` handler stops wander, `setWander(false)` calls
   `syncWanderInputs()`, and that writes `P` back into the very elements
