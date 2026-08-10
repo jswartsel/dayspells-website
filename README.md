@@ -139,7 +139,7 @@ stuttering. `density()` in the console reports what's happening.
 
 ## Pages
 
-Four pages in one document, routed on the hash so the browser's back
+Five pages and a visualizer in one document, routed on the hash so the browser's back
 button works and each can be linked to directly:
 
 | | |
@@ -148,6 +148,7 @@ button works and each can be linked to directly:
 | `#listen` | bandcamp · apple music · spotify, in a stack |
 | `#shows` | "stay tuned for upcoming dates" |
 | `#shop` | "coming soon" |
+| `#viz` | the visualizer, below — also served at `/viz` |
 
 `follow` is not a page — it goes straight out to Instagram. Every
 external link opens in a new tab, so the field is still standing when
@@ -200,6 +201,68 @@ What carries the fix instead is the **floor on the zone semi-axes**
 anyone is tempted to try the rescale again: it works, it is only a few
 lines, and the reason it is not here is taste and phone CPU, not
 correctness.
+
+## The visualizer
+
+`#viz`, also reachable at `dayspells.com/viz`. A screen with nothing on
+it, meant to be left running.
+
+**No type.** `showView` hides every element whose `data-view` does not
+match the name, and nothing claims `viz` — so a route with no view of
+its own hides the lot. That is the whole implementation; `body.viz` then
+hides the chrome that lives outside the views (corner links, hint, back
+caret). The panel is not hidden, because it already is: `c` still opens
+it, so it is opt-in rather than something on screen.
+
+**Wander starts by itself**, deferred to the end of `boot()`. `showView`
+runs before the canvas has been sized, and `setWander` samples the
+canvas to pick the wordmark's contrast colour.
+
+**3–4 glades**, random position and size, regenerated on every resow.
+Grass-only, exactly like `data-zone` — there is simply no type to
+measure them off, so they are invented instead. Semi-axes are 0.08–0.18
+of the **short** side, so they keep their proportions on a phone rather
+than stretching with the window.
+
+They do not overlap, and that took more than a distance check.
+Separation is tested on each glade's **largest** semi-axis, since two
+ellipses clear each other only when their centres are further apart than
+the sum of their bounding radii — comparing widths alone lets a tall
+glade run through its neighbour. On top of that: biggest placed first
+(the big one dropped into a field of small ones is the placement that
+fails), and a shrink-and-retry so a run of large draws degrades in size
+rather than in separation. Measured **0 overlapping pairs out of 2721**,
+across 200 draws each at 1280×800, 390×844 and 844×390.
+
+**A doodle drives the brush.** It writes `ptr.x/y` and nothing else,
+which is the point: the frame loop already differences those into a
+smoothed velocity, so the rustle, the brush radius and the trailing
+overshoot behave exactly as they do under a real hand. Strokes cover
+15–25% of the short side over 1.6–3.2s, with 1.5–4.0s of stillness
+between, smoothstepped so a stroke accelerates and settles instead of
+starting and stopping at full speed. Each stroke turns at least
+`DOODLE_TURN` off the last, so the hand cannot pace a groove. Measured:
+strokes of 16.8–22.9% over 2.05–3.00s, brushing on 47% of frames, peak
+pointer speed 2.09 px/frame, 60.1fps.
+
+This **replaces** the `ghost` Lissajous rather than joining it. That gust
+is a demo for someone who has not touched the page — it sweeps the same
+figure forever, which is fine for eight seconds and obvious on a screen
+left running.
+
+**It resows itself** every 45–90s, counted in the frame loop rather than
+on a timer, so a backgrounded tab does not queue up a burst of regrows
+to run the moment it comes back.
+
+`/viz` is a redirect stub at `viz/index.html`. The site is one file and
+GitHub Pages has no rewrites, so a real page at that path would mean
+shipping a second copy of the whole engine and keeping the two in step.
+The stub costs a visible `/#viz` in the address bar afterwards.
+
+`clearings()` in the console returns the ellipses the last sow actually
+used — the one part of a sow you cannot see directly, since a bloom that
+was correctly excluded and a bloom that was never sown there look the
+same.
 
 ## Zones
 

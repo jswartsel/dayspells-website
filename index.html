@@ -209,6 +209,15 @@
   }
   .hint[data-done="true"]{opacity:0}
 
+  /* ---------- visualizer ----------------------------------------- */
+  /* #viz is a page with nothing on it. Every [data-view] is already
+     hidden by the router -- showView hides everything whose data-view
+     does not match, and no element claims "viz" -- so all that is left
+     to deal with is the chrome that lives outside the views. The panel
+     itself is not in here: it is hidden by default and only `c` opens
+     it, so it is opt-in rather than something on screen. */
+  body.viz .tools, body.viz .hint, body.viz .back{display:none !important}
+
   .loading{
     position:fixed; inset:0; z-index:5; display:grid; place-items:center;
     background:var(--linen); font-size:.68rem; letter-spacing:.24em;
@@ -1155,6 +1164,12 @@ async function boot(){
   loading.dataset.done = 'true';
   resize();
   booted = true;
+  /* Deferred to here on a cold load of #viz. showView ran before the
+     canvas had a size, and setWander samples the canvas to pick the
+     wordmark's contrast colour. resize() has now sown a field, so the
+     hand has a viewport to doodle across and there is something to
+     read back. */
+  if(viz){ resetViz(); if(!wandering) setWander(true); }
   requestAnimationFrame(frame);
   /* The clearings are measured off the type, so they are only right once
      the type is set in the right face. Space Mono arrives over the
@@ -1299,14 +1314,88 @@ function seed(){
     });
   });
 
+  /* The visualizer has no type, so it has nothing to measure clearings
+     off -- it gets a handful of arbitrary ones instead, which is the
+     whole reason they are here: a meadow with a few bare-ish glades in
+     it reads as landscape, and a uniform one reads as wallpaper.
+     Semi-axes are a share of the SHORT side, so the glades keep their
+     proportions on a phone instead of stretching with the window, and
+     `up` is just `ay` -- ZONE_TOP shortens the pad above a line of type
+     so flower heads can press closer to it, and there is no type here.
+     Centres are inset far enough that a glade cannot sit mostly
+     off-screen and read as a bitten edge. New ones on every resow.
+
+     Placement is random but must NOT overlap. Independent draws land on
+     top of each other often enough -- observed on the first look: all
+     four stacked into one clearing in the middle of the window, which
+     reads as a single hole rather than as a meadow with glades in it.
+
+     Separation is tested on each glade's LARGEST semi-axis, not its
+     width. Two ellipses clear each other whenever their centres are
+     further apart than the sum of their bounding radii; testing `ax`
+     alone would let a tall glade run straight through its neighbour.
+     It is a conservative test -- two flat ellipses side by side are
+     rejected while they would in fact have cleared -- and that is the
+     right trade here, because the cost is one more try and the failure
+     is visible.
+
+     Three things make the packing succeed rather than just hope:
+     BIGGEST FIRST, because a big glade dropped into a field of small
+     ones is the placement that fails; SHRINK ON FAILURE, so a run of
+     large draws degrades in size rather than in separation; and a
+     best-effort fallback that keeps whichever candidate was furthest
+     from its neighbours, so a glade is never silently dropped. */
+  if(viz){
+    const GLADE_GAP = 1.04;    // sum-of-radii multiple: >1 leaves daylight
+    const GLADE_TRIES = 40, GLADE_SHRINKS = 4, GLADE_SHRINK = 0.85;
+    const span = Math.min(W, H), n = 3 + (Math.random() < 0.5 ? 0 : 1);
+    const glades = [];
+    const sizes = [];
+    for(let i=0;i<n;i++){
+      const ax = Math.max(rnd(0.08, 0.18) * span, bhw);
+      sizes.push({ax, ay: Math.max(ax * rnd(0.70, 1.30), bhh)});
+    }
+    sizes.sort((a,b)=>Math.max(b.ax,b.ay) - Math.max(a.ax,a.ay));
+
+    for(const s of sizes){
+      let ax = s.ax, ay = s.ay, placed = null, best = null, bestScore = -1;
+      for(let round = 0; round <= GLADE_SHRINKS && !placed; round++){
+        const r = Math.max(ax, ay);
+        for(let tries = 0; tries < GLADE_TRIES; tries++){
+          const x = rnd(0.16, 0.84) * W, y = rnd(0.16, 0.84) * H;
+          /* Ratio rather than raw distance, so the best-effort fallback
+             compares like with like across differently sized glades. */
+          let score = Infinity;
+          for(const g of glades){
+            score = Math.min(score, Math.hypot(x - g.x, y - g.y)
+                                  / ((r + Math.max(g.ax, g.ay)) * GLADE_GAP));
+          }
+          if(score >= 1){ placed = {x, y, ax, ay}; break; }
+          if(score > bestScore){ bestScore = score; best = {x, y, ax, ay}; }
+        }
+        if(!placed && round < GLADE_SHRINKS){ ax *= GLADE_SHRINK; ay *= GLADE_SHRINK; }
+      }
+      const z = placed || best;
+      z.up = z.ay;
+      glades.push(z); zones.push(z);
+    }
+  }
+
   /* The corner links get a bare patch rather than a grass one: nothing
      is sown there at all, so the linen shows through. Two of its four
      edges run off the screen, so it reads as a cleared corner rather
-     than a rectangle cut out of the middle of a meadow. */
+     than a rectangle cut out of the middle of a meadow.
+
+     Skipped when the links are hidden, which the visualizer does. A
+     display:none box measures 0x0 at the origin, and the margin below is
+     absolute -- so the box would not vanish with it, it would become a
+     79x70 bare patch pinned to the top-left corner. The [data-zone]
+     loop above is safe from this because it tests for an empty rect;
+     this branch never had to. */
   const BARE = 0.80;                 // margin scale around the links
   const tools = document.querySelector('.tools');
   let toolBox = null;
-  if(tools){
+  if(tools && tools.getBoundingClientRect().width >= 1){
     const r = tools.getBoundingClientRect();
     const m = Math.max(44, r.height * 1.8) * BARE;
     const ex = (r.width + 2*m) * 0.075 * BARE;
@@ -1506,6 +1595,11 @@ function seed(){
     }
   }
 
+  /* Kept for the console handle below. The clearings are the one part
+     of a sow you cannot see directly -- a bloom that should have been
+     excluded and a bloom that was never sown there look identical. */
+  lastClearings = {grass: zones, bare: bareZones};
+
   plants.sort((p,q)=>p.y-q.y);
   growT = 0;                       // a new field grows in from sizeFrom
   /* The plants these pointed at no longer exist, and the new ones start
@@ -1514,6 +1608,11 @@ function seed(){
   blooms = plants.filter(p => p.a.role !== 'grass' && p.a.role !== 'stem');
 }
 window.regrow = ()=>seed();
+/* clearings() -> the ellipses the last sow actually used, which is how
+   you check a zone did what it was meant to rather than inferring it
+   from where the flowers are not. */
+let lastClearings = {grass: [], bare: []};
+window.clearings = ()=>lastClearings;
 
 /* ---------- views ------------------------------------------------ */
 /* Four pages in one document. Only the active one is in the flow; the
@@ -1524,8 +1623,17 @@ window.regrow = ()=>seed();
    Routing is on the hash so the browser's own back button works and a
    page can be linked to directly. Anything unrecognised (including the
    long-standing #tune) falls through to home. */
-const VIEWS = {home:1, about:1, listen:1, shows:1, shop:1};
-let booted = false;
+/* `viz` is a view with no [data-view] element of its own, and that is
+   not an oversight -- showView hides everything whose data-view does not
+   match the name, so a name nothing claims hides the lot. The CSS rule
+   on body.viz takes care of the chrome that lives outside the views.
+
+   The URL dayspells.com/viz is a stub at viz/index.html that redirects
+   here. GitHub Pages has no rewrites, so the alternative was shipping a
+   second copy of the whole engine at that path; a redirect keeps one
+   file and costs a visible /#viz in the address bar. */
+const VIEWS = {home:1, about:1, listen:1, shows:1, shop:1, viz:1};
+let booted = false, viz = false;
 
 function viewFromHash(){
   const h = location.hash.replace(/^#\/?/, '');
@@ -1538,8 +1646,15 @@ function showView(name, resow){
   document.querySelectorAll('[data-view]').forEach(el=>{
     el.hidden = el.dataset.view !== name;
   });
-  document.getElementById('back').hidden = name === 'home';
+  viz = name === 'viz';
+  document.body.classList.toggle('viz', viz);
+  document.getElementById('back').hidden = name === 'home' || viz;
+  if(viz) resetViz();
   if(resow && booted) regrowNow();
+  /* Deferred past boot on a cold load of #viz: setWander reads the
+     canvas to pick the wordmark's contrast colour, and at this point in
+     boot() the canvas has not been sized yet. boot() starts it instead. */
+  if(viz && booted && !wandering) setWander(true);
 }
 addEventListener('hashchange', ()=>showView(viewFromHash(), true));
 
@@ -1563,6 +1678,9 @@ function resize(){
   grad.addColorStop(0,'rgba(26,19,11,0)');
   grad.addColorStop(1,'rgba(26,19,11,.24)');
   vg.fillStyle = grad; vg.fillRect(0,0,vig.width,vig.height);
+  /* Re-centre the hand, but deliberately NOT resetViz() -- that would
+     restart the resow clock on every tick of a window drag. */
+  if(viz) resetDoodle();
   seed();
 }
 addEventListener('resize', resize);
@@ -1591,7 +1709,113 @@ addEventListener('pointerleave', ()=>{ ptr.live=false; ptr.x=ptr.y=-9999; });
 
 /* No pointer at all (touch device, or nobody home): a phantom gust
    wanders so the page still shows what it does. */
-setTimeout(()=>{ if(!ptr.touched){ ghost.on=true; ptr.live=true; hint.dataset.done='true'; } }, 3200);
+setTimeout(()=>{ if(!ptr.touched && !viz){ ghost.on=true; ptr.live=true; hint.dataset.done='true'; } }, 3200);
+
+/* ---------- the visualizer's hand --------------------------------- */
+/* The visualizer drives the brush itself: a slow doodle that strokes
+   somewhere new every few seconds and rests in between.
+
+   It writes ptr.x/y and nothing else, which is the point -- the frame
+   loop already differences those into a smoothed velocity, so the
+   rustle, the brush radius and the trailing overshoot all behave
+   exactly as they do under a real hand. Nothing in the physics knows
+   the difference.
+
+   This replaces `ghost` rather than joining it. The Lissajous gust is a
+   demo of what the page does for someone who has not touched it; it
+   sweeps the same figure forever, which is fine for eight seconds and
+   obvious on a screen left running. A doodle that picks a new direction
+   each time does not repeat.
+
+   Stroke length is a share of the SHORT side, not the diagonal, so the
+   stroke covers a comparable amount of what you can see on any shape of
+   window. Smoothstepped, so a stroke accelerates and settles rather
+   than starting and stopping at full speed -- with linear easing the
+   velocity is a step function and the field snaps at each end. */
+const DOODLE_REACH = [0.15, 0.25];   // share of min(W,H) per stroke
+const DOODLE_DRAW  = [1.6, 3.2];     // s to walk one stroke
+const DOODLE_REST  = [1.5, 4.0];     // s of stillness between strokes
+/* Random, but never twice down the same line: each stroke turns at
+   least this far off the last one, so the hand cannot pace a groove. */
+const DOODLE_TURN  = 0.7;            // radians, minimum course change
+
+const doodle = {on:false, x:0, y:0, fx:0, fy:0, tx:0, ty:0,
+                t:0, dur:0, resting:true, head:Math.random()*Math.PI*2};
+
+function doodleAim(){
+  const span = Math.min(W, H);
+  const reach = rnd(DOODLE_REACH[0], DOODLE_REACH[1]) * span;
+  /* Turn by at least DOODLE_TURN, either way, then a free spread on top. */
+  const turn = (DOODLE_TURN + Math.random() * (Math.PI - DOODLE_TURN))
+             * (Math.random() < 0.5 ? -1 : 1);
+  for(let tries = 0; tries < 12; tries++){
+    const h = doodle.head + turn + rnd(-0.35, 0.35);
+    const tx = doodle.x + Math.cos(h) * reach;
+    const ty = doodle.y + Math.sin(h) * reach;
+    /* Inset rather than clamped: clamping to the edge would let the hand
+       slide along it, which reads as a machine tracing the frame. */
+    const m = span * 0.06;
+    if(tx > m && tx < W - m && ty > m && ty < H - m){
+      doodle.head = h; doodle.tx = tx; doodle.ty = ty; return;
+    }
+  }
+  /* Boxed in near a corner -- aim back at the middle instead. */
+  doodle.head = Math.atan2(H/2 - doodle.y, W/2 - doodle.x);
+  doodle.tx = doodle.x + Math.cos(doodle.head) * reach;
+  doodle.ty = doodle.y + Math.sin(doodle.head) * reach;
+}
+
+function resetDoodle(){
+  doodle.x = doodle.fx = rnd(0.3, 0.7) * W;
+  doodle.y = doodle.fy = rnd(0.3, 0.7) * H;
+  doodle.resting = true; doodle.t = 0;
+  doodle.dur = rnd(DOODLE_REST[0], DOODLE_REST[1]);
+}
+
+function stepDoodle(dt){
+  doodle.t += dt;
+  if(doodle.resting){
+    if(doodle.t >= doodle.dur){
+      doodle.resting = false; doodle.t = 0;
+      doodle.dur = rnd(DOODLE_DRAW[0], DOODLE_DRAW[1]);
+      doodle.fx = doodle.x; doodle.fy = doodle.y;
+      doodleAim();
+    }
+  }else{
+    const u = smooth(doodle.t / doodle.dur);
+    doodle.x = doodle.fx + (doodle.tx - doodle.fx) * u;
+    doodle.y = doodle.fy + (doodle.ty - doodle.fy) * u;
+    if(doodle.t >= doodle.dur){
+      doodle.x = doodle.tx; doodle.y = doodle.ty;
+      doodle.resting = true; doodle.t = 0;
+      doodle.dur = rnd(DOODLE_REST[0], DOODLE_REST[1]);
+    }
+  }
+  ptr.x = doodle.x; ptr.y = doodle.y;
+}
+
+/* The visualizer resows on its own clock as well. Counted in the frame
+   loop rather than on a timer, so it advances with drawn time: a
+   backgrounded tab does not queue up a burst of regrows to run the
+   moment it comes back. */
+const VIZ_REGROW = [45, 90];         // seconds between resows
+let vizRegrowIn = 0;
+
+function resetViz(){
+  ghost.on = false;                  // the doodle takes the brush over
+  ptr.live = true;
+  resetDoodle();
+  vizRegrowIn = rnd(VIZ_REGROW[0], VIZ_REGROW[1]);
+}
+
+function stepViz(dt){
+  stepDoodle(dt);
+  vizRegrowIn -= dt;
+  if(vizRegrowIn <= 0){
+    vizRegrowIn = rnd(VIZ_REGROW[0], VIZ_REGROW[1]);
+    regrowNow();
+  }
+}
 
 const FORCE = 0.070;
 /* Ceiling on the drawn swing, in radians of bend. 1.5 becomes ~73
@@ -1644,7 +1868,11 @@ function frame(now){
   dt = Math.min(dt, 1/30); t += dt;
   if(!reduced) govern(dt);
 
-  if(ghost.on){
+  /* The visualizer's hand wins over the phantom gust outright rather
+     than relying on resetViz having cleared ghost.on -- the 3.2s
+     no-pointer timeout can set that flag after the fact. */
+  if(viz) stepViz(dt);
+  else if(ghost.on){
     ghost.t += dt;
     ptr.x = W*(0.5 + 0.40*Math.sin(ghost.t*0.42)*Math.cos(ghost.t*0.17));
     ptr.y = H*(0.5 + 0.36*Math.sin(ghost.t*0.31 + 1.1));

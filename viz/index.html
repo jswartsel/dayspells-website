@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>dayspells</title>
+<!-- dayspells.com/viz -> dayspells.com/#viz
+
+     The site is one file, and GitHub Pages has no rewrites, so a real
+     page at this path would mean shipping a second copy of the whole
+     engine here and keeping the two in step. This stub is the other
+     option: one URL to hand out, one file to maintain, and a visible
+     /#viz in the address bar afterwards.
+
+     Absolute so it works from the site root on any host; replace()
+     rather than assign() so the redirect leaves no history entry to get
+     stuck on when going back. -->
+<meta name="robots" content="noindex">
+<link rel="canonical" href="/#viz">
+<style>
+  html,body{height:100%;margin:0;background:#e3cf86}
+  a{position:fixed;inset:0;display:grid;place-items:center;
+    font:700 .68rem/1 ui-monospace,SFMono-Regular,Menlo,monospace;
+    letter-spacing:.24em;text-transform:lowercase;color:#4a3a1e}
+</style>
+<script>location.replace('/#viz');</script>
+</head>
+<body>
+<noscript><a href="/#viz">visualizer</a></noscript>
+</body>
+</html>

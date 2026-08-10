@@ -117,7 +117,7 @@ Single file. No build step for the page itself; `build.py` only inlines
 the payload to produce `dist/`.
 
 ### Pages
-Five, routed on the hash so the back button works and each is linkable:
+Six, routed on the hash so the back button works and each is linkable:
 
 | | |
 |---|---|
@@ -126,12 +126,38 @@ Five, routed on the hash so the back button works and each is linkable:
 | `#listen` | bandcamp · apple music · spotify |
 | `#shows` | "coming soon" |
 | `#shop` | "coming soon" |
+| `#viz` | the visualizer — no type at all. Also served at `/viz` |
 
 `follow` is not a page — straight out to Instagram. External links open
 in a new tab. Only the active page is in the flow; the rest are
 `[hidden]`, which is what keeps the zones honest (a hidden box measures
 0×0 and drops out of the zone pass). A `<` appears top-left on sub-pages.
 **Changing page resows the field** — that is the transition, not a cost.
+
+### viz
+A screen with nothing on it, for leaving running. No type: `showView`
+hides every `[data-view]` because nothing claims the name `viz`, and
+`body.viz` hides the corner links, the hint and the back caret. Wander
+starts by itself (deferred to the end of `boot()` — `setWander` samples
+the canvas, which has no size earlier).
+
+- **3–4 glades**, random position and size, `ax` 0.08–0.18 of the short
+  side, regenerated on every resow. Grass-only, same as `data-zone`.
+  Non-overlapping: separation is tested on each glade's **largest**
+  semi-axis, biggest placed first, shrinking on failure. Measured 0
+  overlapping pairs in 2721, across 1280×800, 390×844 and 844×390.
+- **A doodle drives the brush.** It writes `ptr.x/y` and nothing else,
+  so the frame loop differences it into velocity and the physics cannot
+  tell it from a hand. Strokes of 15–25% of the short side over
+  1.6–3.2s, resting 1.5–4.0s, each turning ≥ `DOODLE_TURN` off the last
+  so it cannot pace a groove. Replaces the `ghost` Lissajous, which
+  repeats visibly on a screen left running.
+- **Resows itself** every 45–90s, counted in the frame loop so a
+  backgrounded tab does not bank a burst of them.
+
+`/viz` is a redirect stub at `viz/index.html`; GitHub Pages has no
+rewrites, so the alternative was a second copy of the whole engine at
+that path. Costs a visible `/#viz` in the address bar.
 
 ### Zones
 Two kinds, same geometry, measured off the type itself via

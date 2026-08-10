@@ -310,6 +310,40 @@ first for what the project is and how to run it.
   else in that section is. The durations were specified in wall-clock
   seconds, and dividing them would make "10-20 seconds" true at exactly
   one setting of a slider.
+- **`#viz` is a route with no view element, and that is the mechanism,
+  not an omission.** `showView` hides everything whose `data-view` does
+  not match the name, so a name nothing claims hides every page at once.
+  Do not "fix" it by adding a `data-view="viz"` element -- that would put
+  a box back on screen and give the zone pass something to measure.
+- **The visualizer's hand writes `ptr.x/y` and nothing else.** The frame
+  loop differences those into a smoothed velocity, so rustle, brush
+  radius and trailing overshoot all behave exactly as under a real hand.
+  Do not reach into the spring code to fake motion. It also has to WIN
+  over `ghost` in the frame loop rather than relying on `resetViz`
+  clearing `ghost.on` -- the 3.2s no-pointer timeout can set that flag
+  afterwards.
+- **Glade separation is tested on the largest semi-axis, not the
+  width.** Two ellipses clear each other when their centres are further
+  apart than the sum of their bounding radii; comparing `ax` alone lets
+  a tall glade run straight through its neighbour. Biggest is placed
+  first (a big glade dropped into a field of small ones is the placement
+  that fails) and shrinks on failure, so a run of large draws degrades
+  in size rather than in separation. Measured 0 overlapping pairs in
+  2721 across three viewports. An earlier version only forbade
+  coincidence and all four still stacked into one hole in the middle.
+- **`toolBox` has to check for an empty rect.** A `display:none` box
+  measures 0x0 at the origin, and the margin around it is absolute -- so
+  hiding the corner links (which the visualizer does) did not remove the
+  bare patch, it moved it to a 79x70 square pinned to the top-left
+  corner. The `[data-zone]` loop was already safe because it tests for
+  an empty rect; this branch was not.
+- **Anything that measures the page must be checked against the pane's
+  REAL surface.** A run of screenshots showed the meadow painting only a
+  ~380px corner of a 1440x900 viewport. The page was fine --
+  `getImageData` over the canvas showed 2156x1348 of 2160x1350 painted
+  -- and the browser pane was emulating the viewport in layout while
+  compositing at its true ~382px width. Measure the canvas before
+  believing a screenshot that looks structurally broken.
 - **Colour is one 3×3 matrix**, composed from gain+tint, hue and
   saturation and applied in a single pass over the pixels. It is exactly
   the identity at the defaults, so the untouched case costs nothing. Use
