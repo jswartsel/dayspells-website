@@ -283,8 +283,13 @@ first for what the project is and how to run it.
 - **Granularity and rate are separate knobs, and `step` alone is the
   wrong one.** Thirding `step` by itself is three times *slower*, not
   three times *finer*. Both terms move together -- `step:5/3` with
-  `every:0.25/3` -- which is why they are written as divisions in the
-  table rather than as decimals.
+  `every:X/3` -- which is why they are written as divisions in the table
+  rather than as decimals. The corollary is the other direction:
+  **ground hue was halved by doubling `every` alone** (0.25 -> 0.50,
+  keeping the 5/3 step), so it drifts through the same hues at half the
+  pace rather than in coarser jumps. Measured A/B, 40.1 deg/s -> 20.0,
+  a ratio of 0.498, with plant hue untouched at 0.999. Its cycle went
+  18s -> 36s; the four-walker repeat stays at ~3.8 days.
 - **Read a slider's value BEFORE calling `setWander(false)`.** The
   takeover in the `input` handler stops wander, `setWander(false)` calls
   `syncWanderInputs()`, and that writes `P` back into the very elements

@@ -18,7 +18,7 @@ Four walkers, each with a value, a direction, and bounds it bounces off:
 
 ```js
 const WANDER = [
-  {k:'bgHue', step:5/3,  every:0.25/3, lo:0, hi:360, dir: 1},
+  {k:'bgHue', step:5/3,  every:0.50/3, lo:0, hi:360, dir: 1},
   {k:'fgHue', step:5/3,  every:0.40/3, lo:0, hi:360, dir:-1},
   {k:'bgSat', step:0.06, every:1.083, lo:0, hi:2.5, dir: 1},
   {k:'fgSat', step:0.05, every:1.000, lo:0, hi:2.5, dir:-1}
@@ -79,7 +79,7 @@ At the default `wanderSpeed 2`:
 
 | walker | steps per full cycle | wall time |
 |---|---|---|
-| ground hue | 432 | 18.0s |
+| ground hue | 432 | 36.0s |
 | ground sat | 84 | 45.5s |
 | plant hue | 432 | 28.8s |
 | plant sat | 100 | 50.0s |
@@ -94,7 +94,7 @@ anyone will sit through, and a real number worth putting on the page.
 > The comment in `index.html` claiming a beat period of "about four
 > months" from primes `43×59×71×89` refers to intervals that are not in
 > the code any more. It is stale — the real intervals are
-> 0.0833 / 0.1333 / 1.083 / 1.000.
+> 0.1667 / 0.1333 / 1.083 / 1.000.
 
 ---
 

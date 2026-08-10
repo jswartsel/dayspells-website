@@ -218,11 +218,19 @@ it, so it is opt-in rather than something on screen.
 runs before the canvas has been sized, and `setWander` samples the
 canvas to pick the wordmark's contrast colour.
 
-**3–4 glades**, random position and size, regenerated on every resow.
+**0–3 glades**, random position and size, redrawn on every resow.
 Grass-only, exactly like `data-zone` — there is simply no type to
 measure them off, so they are invented instead. Semi-axes are 0.08–0.18
 of the **short** side, so they keep their proportions on a phone rather
 than stretching with the window.
+
+Zero is in the range on purpose: a sow with no clearings at all reads as
+unbroken field, and glades on every single sow made them a feature of
+the page rather than something that happens. An empty list is safe all
+the way down — `inAny()` returns false on it and the top-up pass is
+guarded by `zones.length`. Measured over 200 sows: 59 / 57 / 39 / 45 for
+0 / 1 / 2 / 3, no bloom intrusions, and an empty sow still sowing its
+full field.
 
 They do not overlap, and that took more than a distance check.
 Separation is tested on each glade's **largest** semi-axis, since two
@@ -231,8 +239,9 @@ the sum of their bounding radii — comparing widths alone lets a tall
 glade run through its neighbour. On top of that: biggest placed first
 (the big one dropped into a field of small ones is the placement that
 fails), and a shrink-and-retry so a run of large draws degrades in size
-rather than in separation. Measured **0 overlapping pairs out of 2721**,
-across 200 draws each at 1280×800, 390×844 and 844×390.
+rather than in separation. Measured **0 overlapping pairs** in 2721 across 200 draws each at
+1280×800, 390×844 and 844×390, and 0 in 174 again after the count
+dropped to 0–3.
 
 **A doodle drives the brush.** It writes `ptr.x/y` and nothing else,
 which is the point: the frame loop already differences those into a
@@ -284,6 +293,19 @@ This **replaces** the `ghost` Lissajous rather than joining it. That gust
 is a demo for someone who has not touched the page — it sweeps the same
 figure forever, which is fine for eight seconds and obvious on a screen
 left running.
+
+The **ghost** group in the panel drives it on any page: an `enable`
+checkbox and a `speed` slider. Speed scales `dt`, not `doodle.spd` — a
+pure time dilation, so the pen traces the same figure sooner. Scaling
+the speed alone widens every curve instead (turn radius is speed over
+turn rate) and the doodles straighten out as they get faster. The
+default is **2.5**: 1.0 is the pace it was first tuned at and reads as
+too languid for someone playing with the page, 4 overshot. Measured
+travel: 158 px/s at 1, 183 at 2.5, 644 at 4. `enable` is forced on in
+the visualizer and restored on the way out; a real pointer takes the
+brush back, and after `GHOST_IDLE` of stillness the hand resumes —
+unless the checkbox was deliberately unchecked, which `ghostMuted` keeps
+distinct from a pointer simply arriving.
 
 **It resows itself** every 15–20s, counted in the frame loop rather than
 on a timer, so a backgrounded tab does not queue up a burst of regrows
@@ -416,7 +438,7 @@ answer to space themselves, and handling it twice would toggle twice and
 land back where it started.
 
 **Wander** walks the four hue and saturation sliders on their own, each
-bouncing between its bounds on its own interval — hue every 0.0833s and
+bouncing between its bounds on its own interval — hue every 0.1667s and
 0.1333s, saturation every 1.083s and 1.000s, all divided by `wander speed`
 (2.0 by default, so twice that pace). The intervals are deliberately
 unequal so the four never line up, and the combinations end up somewhere
@@ -461,10 +483,12 @@ roll rather than rolling separately:
 |---|---|---|
 | **dark** | 0 | between the slider's value and full |
 | **home** | whatever `ground gain` was when wander started | between the slider's value and full |
-| **bright** | 80–100% of the slider's maximum | **0–15% of full** |
+| **bright** | 80–100% of the slider's maximum | **0–5% of full** |
 
 The pairing is the point. Against a blown-out ground the plants go
-almost black and the field reads as silhouettes cut out of light;
+very nearly black — measured across 60 bright rolls, 0.03% to 4.99% of
+full, a peak gain of 0.10 — and the field reads as silhouettes cut out
+of light;
 against a dark or ordinary ground they stay the brightest thing on
 screen. Rolling the two independently would give washed-out flowers on a
 washed-out ground a third of the time — the one combination with nothing

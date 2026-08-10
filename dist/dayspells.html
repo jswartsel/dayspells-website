@@ -462,10 +462,10 @@ const DEFAULTS = {
   /* The automated hand. ghostOn is off here and turned on by the idle
      check on a page nobody touches, or forced on by the visualizer.
      ghostSpeed is a pure time dilation on the doodle -- 1.0 is the pace
-     it was first tuned at, and 4 is the default because that pace read
-     as too languid to be someone playing with the page. */
+     it was first tuned at, which read as too languid to be someone
+     playing with the page. 4 overshot; 2.5 is the settled default. */
   ghostOn:    0,
-  ghostSpeed: 4.00,
+  ghostSpeed: 2.50,
 
   markSize:  1.30,
   markColor: '#f4451f',
@@ -798,16 +798,18 @@ function rebakeGround(){
 /* Four slow oscillators on the hue and saturation of ground and plants.
    The intervals are deliberately unequal so the four rarely line up, and
    the combinations drift somewhere neither of us would have chosen.
-   Simulated, at wanderSpeed 2: the walkers cycle in 18s, 28.8s, 45.5s
+   Simulated, at wanderSpeed 2: the walkers cycle in 36s, 28.8s, 45.5s
    and 50.0s, and the exact four-value state repeats every 3.8 days.
-   (The two saturation figures moved when those walkers were slowed --
-   they were 27.3s and 37.5s. The repeat lands back on ~3.8 days by
-   coincidence, not by design: 3.79 against 3.8.)
+   (Those figures have moved twice -- the saturations when they were
+   slowed, from 27.3s and 37.5s, and ground hue when it was halved, from
+   18s. The repeat has landed back on ~3.8 days each time by
+   coincidence rather than design: 3.79 against 3.8.)
    (An earlier version of this comment claimed four months, from primes
    43x59x71x89 that are not these intervals. See GAME.md for the full
-   working, and for why this is deterministic as a state machine but NOT
-   as a wall clock -- the accumulator below resets rather than
-   subtracting, so the period follows the frame rate.) */
+   working. This is deterministic as a state machine AND, since the
+   accumulator below was fixed to subtract rather than reset, very
+   nearly as a wall clock -- within 0.8% of nominal, with what remains
+   being the dt clamp and rAF throttling in a hidden tab.) */
 /* Stepped, not continuous. Re-colouring every frame costs 15.4ms of a
    16.7ms budget -- measured, and far more than the 1.4ms the synchronous
    timings suggested, because allocating canvases and running the shadow
@@ -830,15 +832,25 @@ function rebakeGround(){
    would have made the steps finer as well as rarer, which is a
    different change. 0.65/0.60 = 1.083 and 0.75/0.75 = 1.000.
 
-   That 1.000 is the one blemish on "no common factor": it is exactly
-   four times bgHue's 0.25, so on paper those two step together every
-   fourth ground-hue move. In practice they do not stay locked, because
-   the accumulator below RESETS rather than subtracting -- each walker
-   fires on the first frame past its threshold, so the phases drift
-   apart within seconds and never re-acquire. If the reset is ever
-   fixed (see GAME.md), nudge this to 1.01 and the coincidence goes
-   away at a cost of 1% on the rate. */
-/* The hues are written as `original / 3` on BOTH terms on purpose: that
+   That 1.000 is the one blemish on "no common factor": it is an exact
+   multiple of bgHue's interval, so the two step on the same frame
+   periodically -- and since the accumulator was fixed to subtract, that
+   lockstep is now real rather than something the frame quantisation
+   shook apart. It was left alone on purpose. What the unequal intervals
+   are actually protecting is the SET of colour combinations the four
+   walkers reach, and that is governed by their cycle lengths, not by
+   which frame they happen to fire on. Those are 36 / 28.8 / 45.5 / 50s,
+   whose LCM is still ~3.8 days, so the combination space is untouched;
+   two independent properties stepping in the same frame is not
+   something anybody can see. Nudging this to 1.01 would buy nothing and
+   would cost the exact 25% the plant saturation was slowed by. */
+/* Ground hue additionally runs at HALF the rate of everything else --
+   0.50 where the original was 0.25 -- which is why its numerator is the
+   odd one out. Only `every` was doubled, so the fine 5/3 step survives
+   and the ground drifts through the same hues at half the pace rather
+   than in coarser jumps. Its cycle goes 18s -> 36s.
+
+   The hues are written as `original / 3` on BOTH terms on purpose: that
    is the whole shape of the granularity change. Thirding `step` alone
    would have been three times slower rather than three times finer;
    thirding `every` with it holds the drift rate exactly where it was and
@@ -852,7 +864,7 @@ function rebakeGround(){
    amortised becoming 0.31ms. Measured: 60.1fps before and after, worst
    frame 27ms before and 25.3ms after. */
 const WANDER = [
-  {k:'bgHue', step:5/3,  every:0.25/3, lo:0,  hi:360,  dir: 1, t:0, ground:1},
+  {k:'bgHue', step:5/3,  every:0.50/3, lo:0,  hi:360,  dir: 1, t:0, ground:1},
   {k:'fgHue', step:5/3,  every:0.40/3, lo:0,  hi:360,  dir:-1, t:0, ground:0},
   {k:'bgSat', step:0.06, every:1.083,  lo:0,  hi:2.5,  dir: 1, t:0, ground:1},
   {k:'fgSat', step:0.05, every:1.000,  lo:0,  hi:2.5,  dir:-1, t:0, ground:0}
@@ -898,7 +910,7 @@ let wandering = false, plantQueue = 0;
    handling: the wordmark derives its colour from the backdrop, so it
    flips light over the black and dark over the white on its own. */
 const SWELL_BRIGHT  = [0.80, 1.00];   // ground: share of full gain when bright
-const SWELL_FG_DARK = [0.00, 0.15];   // plants: share of full, under a bright ground
+const SWELL_FG_DARK = [0.00, 0.05];   // plants: share of full, under a bright ground
 
 let swellBase = 1.22, swellHi = 2;      // ground: home, and full
 let swellFgBase = 1.35, swellFgHi = 2;  // plants: home, and full
@@ -1356,7 +1368,13 @@ function seed(){
   if(viz){
     const GLADE_GAP = 1.04;    // sum-of-radii multiple: >1 leaves daylight
     const GLADE_TRIES = 40, GLADE_SHRINKS = 4, GLADE_SHRINK = 0.85;
-    const span = Math.min(W, H), n = 3 + (Math.random() < 0.5 ? 0 : 1);
+    /* 0 to 3, drawn fresh on every resow -- so a sow can come up with no
+       clearings at all and read as unbroken field. That is the point of
+       including zero: four out of four sows having glades made them a
+       feature of the page rather than something that happens. An empty
+       list is safe all the way down -- inAny() returns false on it and
+       the top-up pass is guarded by zones.length. */
+    const span = Math.min(W, H), n = (Math.random()*4)|0;
     const glades = [];
     const sizes = [];
     for(let i=0;i<n;i++){

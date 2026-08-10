@@ -141,16 +141,17 @@ hides every `[data-view]` because nothing claims the name `viz`, and
 starts by itself (deferred to the end of `boot()` — `setWander` samples
 the canvas, which has no size earlier).
 
-- **3–4 glades**, random position and size, `ax` 0.08–0.18 of the short
-  side, regenerated on every resow. Grass-only, same as `data-zone`.
+- **0–3 glades**, random position and size, `ax` 0.08–0.18 of the short
+  side, redrawn on every resow — zero included, so a sow can come up as
+  unbroken field. Measured over 200 sows: 59 / 57 / 39 / 45. Grass-only, same as `data-zone`.
   Non-overlapping: separation is tested on each glade's **largest**
   semi-axis, biggest placed first, shrinking on failure. Measured 0
   overlapping pairs in 2721, across 1280×800, 390×844 and 844×390.
 - **The hand is `ghost` in the panel** — an enable checkbox and a speed
   slider, on every page, not just the visualizer. Speed is a pure time
-  dilation on the doodle (scaling `dt`), default **4**: 1.0 is the pace
-  it was first tuned at and read as too languid. Measured 158 px/s at 1
-  against 644 at 4. A real pointer takes the brush back; after
+  dilation on the doodle (scaling `dt`), default **2.5**: 1.0 is the pace
+  it was first tuned at and read as too languid, 4 overshot. Measured
+  158 px/s at 1, 183 at 2.5, 644 at 4. A real pointer takes the brush back; after
   `GHOST_IDLE` of stillness the hand resumes, but only if the checkbox
   was not deliberately unchecked (`ghostMuted`).
 - **A doodle drives the brush.** It writes `ptr.x/y` and nothing else,
@@ -207,7 +208,7 @@ by cluster. A density governor (`autothin`) exists but is **off**.
 
 ### wander
 Four hue/sat walkers on unequal intervals, stepped rather than
-continuous: `every` 0.0833 / 0.1333 (hues) and 1.083 / 1.000 (sats), divided
+continuous: `every` 0.1667 / 0.1333 (hues) and 1.083 / 1.000 (sats), divided
 by `wander speed`. The two saturations were slowed on purpose — ground
 sat to 0.60 of the rate it ran at, plant sat to 0.75 — via `every`, not
 `step`, because `every` is the rate term `wanderSpeed` already divides.
@@ -217,8 +218,8 @@ box behind it, steered to the complementary hue with lightness flipped.
 **The gain roll** rides on the resow, not on a clock, and snaps rather
 than ramping. Ground rolls dark (0) / home (the slider's value when
 wander started) / bright (80–100% of max), equally likely; the plants
-follow from it — 0–15% of full under a bright ground, else between the
-slider's value and full. The pairing avoids washed-out flowers on a
+follow from it — 0–5% of full under a bright ground (measured 0.03–4.99%), else between
+the slider's value and full. The pairing avoids washed-out flowers on a
 washed-out ground. Only while wander runs; both go home when it stops.
 
 ### breathing
@@ -293,7 +294,7 @@ is already past the ~1.2 where the clamp starts eating `bgHue`.
   nominal, where ground hue used to be 6.7% slow. What still diverges
   from wall time is deliberate: `dt` is clamped to 1/30, and a
   backgrounded tab throttles rAF.
-- **Walker cycles at `wanderSpeed 2`:** ground hue 18s, ground sat 45.5s,
+- **Walker cycles at `wanderSpeed 2`:** ground hue 36s, ground sat 45.5s,
   plant hue 28.8s, plant sat 50.0s; full state repeats every **~3.8
   days**. The hue cycles are unchanged by the granularity change — step
   and interval were both divided by 3, so only the grain moved. (A
