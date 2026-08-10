@@ -285,12 +285,14 @@ is a demo for someone who has not touched the page — it sweeps the same
 figure forever, which is fine for eight seconds and obvious on a screen
 left running.
 
-**It resows itself** every 30–40s, counted in the frame loop rather than
+**It resows itself** every 15–20s, counted in the frame loop rather than
 on a timer, so a backgrounded tab does not queue up a burst of regrows
-to run the moment it comes back. The **grow-in runs at 10s** here rather
-than the site's 6: a resow every half minute means the growing-in is
-most of what there is to watch, so it is the show rather than something
-to get through. `P.grow` is global and travels in `tune()`, so the mode
+to run the moment it comes back. The **grow-in runs at 5s** here rather
+than the site's 6 — at 10 it was most of what you ever saw and the field
+barely stood still before being replaced; at 5 it reads as the field
+arriving rather than as a permanent state. Measured across live cycles:
+5s of grow-in then 11–13s of settled field, which is also the window
+breathing gets. `P.grow` is global and travels in `tune()`, so the mode
 borrows it — saved on the way in, restored on the way out.
 
 `/viz` is a redirect stub at `viz/index.html`. The site is one file and
@@ -404,8 +406,9 @@ colour so they read as part of the page rather than as chrome:
 - **mod** — toggle the panel
 
 They stay put while the panel is open, so `mod` is always there to close
-it again. **Space** toggles wander, `c` toggles the panel and `Esc`
-closes it; `#tune` in the URL opens it on load. The panel itself is
+it again. **Space** toggles wander, `m` (or the older `c`) toggles the panel and
+`Esc` closes it; `#tune` in the URL opens it on load. `m` is the only
+way into the panel in the visualizer, where the corner links are hidden. The panel itself is
 hidden by default.
 
 Space is ignored while a button or slider has focus — those already
@@ -443,57 +446,73 @@ with wander running, worst frame 21ms against 18 idle.
 it looks, and how hard it chases what it sees. The corner links follow it,
 so the colour it stops on is the one you copy.
 
-### The gain swell
+### The gain roll
 
-Laid over wander on its own clock, rather than as a fifth walker —
-walkers bounce between bounds at a constant rate, and this has phases, a
-hold, and a home to return to. The ground waits **10–20s** at its base
-gain, darkens to **0 over 5s**, sits black for **5–10s**, blows out to
-full gain over **3–5s**, then settles home over **4s**. A cycle is
-roughly 30–45 seconds.
+Ground **and** plant brightness are both re-rolled on every resow, and
+only on a resow. No clock, no ramp — the field is being replaced in that
+same frame, so the light snapping with it reads as one event. Easing it
+instead smears one cut over five seconds and puts the light out of step
+with the field it belongs to.
 
-"Full gain" is read off the `ground gain` slider's own max the same way
-`syncWanderBounds` reads the walkers' bounds, so widening the control
-widens the swell with it. At the current max of 2.0 the linen clips to
-white; at 0 it is black. Both ends stay readable without any special
-handling, because the wordmark already derives its colour from the
-backdrop — it flips light over the black and dark over the white on its
-own.
+The ground rolls three ways, equally likely; the plants follow from that
+roll rather than rolling separately:
 
-"Home" is whatever `ground gain` was when wander started, so the default
-1.22 if nobody has touched it. Unlike hue and saturation, which are left
-wherever they landed so you can `copy(tune())` a combination you like,
-gain is **restored when wander stops** — a transient that stranded the
-ground at black would just be a bug. Dragging `ground gain` takes
-control back mid-swell, the same as the four walker sliders.
+| ground | | plants |
+|---|---|---|
+| **dark** | 0 | between the slider's value and full |
+| **home** | whatever `ground gain` was when wander started | between the slider's value and full |
+| **bright** | 80–100% of the slider's maximum | **0–15% of full** |
 
-Ramps are smoothstepped; linear has a corner at each end and reads as a
-cut rather than a swell. Only the 4s settle was a free choice — the
-other three durations were specified. There is no hold at full gain, so
-the top reads as a flash rather than a plateau.
+The pairing is the point. Against a blown-out ground the plants go
+almost black and the field reads as silhouettes cut out of light;
+against a dark or ordinary ground they stay the brightest thing on
+screen. Rolling the two independently would give washed-out flowers on a
+washed-out ground a third of the time — the one combination with nothing
+to look at.
 
-It costs one tile re-bake per frame while a ramp is moving (0.94ms) and
-**nothing at all** during the holds, because `stepSwell` reports whether
-it actually moved the gain and the caller folds that into the same
-one-rebake-per-frame flag the walkers use. Measured through a fall:
-60.3fps, 59.4 bakes/sec; through the hold, 24.5 bakes/sec, all of them
-the hue walker's. A full real-time cycle held 60.1fps, worst frame 22ms.
+Measured over 600 rolls: 33.7% / 33.3% / 33.0%, bright landing between
+80.1% and 99.8% of max. Across six live auto-resows: ground 1.76 / 1.98
+with plants 0.19 / 0.29, and ground 0 / 0 / 1.22 with plants 1.72 / 1.80
+/ 1.60 — the pairing holds every time.
 
-`SWELL_WAIT` / `SWELL_FALL` / `SWELL_DARK` / `SWELL_RISE` / `SWELL_BACK`
-are the knobs. They are **not** divided by `wander speed`, unlike
-everything else in this section: the durations are wall-clock, and
-dividing them would make "10–20 seconds" true at exactly one setting.
+`bright` is a range rather than the maximum because the top of the
+slider clips the linen to flat white; backing off a little keeps some
+weave. Both maxima are read off the sliders' own `max`, the way
+`syncWanderBounds` reads the walkers' bounds, so widening a control
+widens this with it.
+
+It only rolls while wander is running — the gains are part of the drift,
+not something a plain regrow should touch. `resize()` and `fonts.ready`
+call `seed()` directly and are deliberately not resow triggers; a window
+drag re-rolling the light would be absurd. Both gains go home when
+wander stops, unlike hue and saturation, which are left where they land
+so `copy(tune())` captures a look.
+
+Both extremes stay readable with no special handling: the wordmark
+derives its colour from the backdrop, so it flips light over the black
+and dark over the white on its own.
+
+> An earlier version of this was a five-phase machine on its own timer —
+> wait, fall to black, hold, rise, settle home. Two phases, three timers
+> and an easing function came out when it moved onto the resow.
 
 ### Breathing
 
 Wander changes the blooms' **size** as well as their colour. Flowers are
 picked at random — 200 a second, so about 500 of the ~1100 are moving at
 any moment — and each eases to a new size and stops there. Both moves are
-relative to where the plant already is: up multiplies by **1.5**, down
-**halves**. A bloom at the grow-in end size blows up to 150% of it, one
+relative to where the plant already is: up multiplies by **1.2**, down
+**halves**. The two ends are deliberately lopsided — growth is gentle
+and capped close to the sown size while shrinking is still a halving all
+the way down to the grow-in start size, so the field carries a
+scattering of small flowers at any moment. `BREATHE_UP` and `BREATHE_HI`
+move together: a step that overshoots the ceiling would make the ceiling
+the only size a grown bloom can hold. Measured over 48s: mean holds at
+0.72–0.84 with no drift, individuals span 0.13–1.2, and 11–20% of blooms
+sit below half their sown size at any moment. A bloom at the grow-in end size blows up to 150% of it, one
 sitting at 20% goes to 30%, and three or four *down* draws in a row put
 it at the grow-in **start** size — the same speck the whole field begins
-as on load. The band is `sizeFrom/size` to 1.5.
+as on load. The band is `sizeFrom/size` to 1.2.
 
 It is a **draw-time scale**, like grow-in and for the same reason: the
 sprite is already blitted through a scaling `setTransform`, so the extra
@@ -505,11 +524,11 @@ out slightly *below* rest, so there is no overdraw cost.
 bigger move than multiplying by 1.5 — `ln 2` against `ln 1.5` — so a fair
 coin drifts the whole meadow downward and it settles at a fraction of its
 size after a couple of minutes, which reads as the field wilting rather
-than breathing. `BREATHE_FAIR` (0.631) is the weighting that leaves the
+than breathing. `BREATHE_FAIR` (0.792 at the current steps) is the weighting that leaves the
 walk standing still, derived from the two step sizes so it stays right if
 they are re-tuned. `BREATHE_REVERT` adds a gentle pull back toward the
-sown size on top. Measured, the field's mean size holds at 0.90 from 30s
-to 60s while individual blooms span 0.33 to 1.5.
+sown size on top. Measured, the field's mean size holds at 0.72–0.84 from 0s
+to 60s while individual blooms span the full 0.13 to 1.2 band.
 
 Breathing waits for the **grow-in** to finish — the field is already
 ramping from `sizeFrom` to `size`, and a second scale animation on top of
@@ -560,6 +579,7 @@ around words that are no longer there.
 | **rustle** | amount (0–8; the drawn swing saturates at ~73° from 4 up, see below) |
 | **wander** | speed of the colour drift |
 | **meadow** | ground hue, ground sat, ground gain, plant hue, plant sat, plant gain, ground zoom, density |
+| **ghost** | enable, speed — the automated hand, on any page |
 | **plant mix** | relative amount of purple / white / yellow / pink flwrs, and grass |
 | | a live fps / drawn / quality readout |
 

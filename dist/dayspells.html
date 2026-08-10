@@ -459,6 +459,14 @@ const DEFAULTS = {
   /* Multiplier on the wander step rate. 1.0 is the original pace. */
   wanderSpeed: 2.00,
 
+  /* The automated hand. ghostOn is off here and turned on by the idle
+     check on a page nobody touches, or forced on by the visualizer.
+     ghostSpeed is a pure time dilation on the doodle -- 1.0 is the pace
+     it was first tuned at, and 4 is the default because that pace read
+     as too languid to be someone playing with the page. */
+  ghostOn:    0,
+  ghostSpeed: 4.00,
+
   markSize:  1.30,
   markColor: '#f4451f',
 
@@ -855,87 +863,78 @@ const WANDER = [
    cost and barely changes how the drift reads. */
 let wandering = false, plantQueue = 0;
 
-/* ---------- the gain swell ---------------------------------------- */
-/* A slow event laid over wander, on its own clock rather than as a
-   fifth walker: the ground darkens away to nothing, sits there, blows
-   out to full gain, then settles back to wherever `ground gain` was
-   when wander started -- which is the default 1.22 if nobody has
-   touched it. A walker could not do this. Walkers bounce between bounds
-   at a constant rate; this has phases, holds, and a home to return to.
+/* ---------- the gain roll ----------------------------------------- */
+/* Ground and plant brightness are both re-rolled on every resow, and
+   only on a resow. There is no clock and no ramp: the field is being
+   replaced in that same frame, so the light snapping with it reads as
+   one event. Easing it instead just smears one cut over five seconds
+   and puts the light out of step with the field it belongs to.
 
-   `full gain` is read off the slider's own max, the same way
-   syncWanderBounds reads the walkers' bounds, so widening the control
-   widens the swell with it. At the current max of 2.0 the linen clips
-   to pure white, and at 0 it is black -- both ends are deliberate.
+   It used to be a five-phase machine on its own timer -- wait, fall to
+   black, hold, rise, settle home. Two phases, three timers and an
+   easing function came out when it moved onto the resow.
 
-   Only SWELL_BACK was not specified: the fall, the hold and the rise
-   all have stated durations and the settle home did not, so it is a
-   flat 4s, roughly the midpoint of the rise. There is no hold at full
-   gain either, so the top reads as a flash rather than a plateau; a
-   SWELL_PEAK phase would be a few lines if that is wanted.
+   THE GROUND rolls three ways, equally likely:
+     dark    0, and it stays there until the next resow
+     home    whatever `ground gain` was when wander started
+     bright  somewhere in SWELL_BRIGHT of the slider's maximum
 
-   Ramps are smoothstepped, not linear. A linear fade to black has a
-   corner at each end and reads as a cut rather than a swell.
+   `bright` is a range rather than the maximum itself because the top of
+   the slider clips the linen to flat white; backing off a little keeps
+   some weave visible.
 
-   Deliberately NOT divided by wanderSpeed, unlike everything else in
-   this section. The durations here were specified in wall-clock
-   seconds, and dividing them would make "10-20 seconds" true only at
-   one setting of a slider. Divide `dt` on the way in if that is ever
-   wanted instead. */
-const SWELL_WAIT = [10, 20];   // s at base before it begins again
-const SWELL_FALL = 5.0;        // s from base down to 0
-const SWELL_DARK = [5, 10];    // s held at 0
-const SWELL_RISE = [3, 5];     // s from 0 up to full gain
-const SWELL_BACK = 4.0;        // s from full gain back to base
+   THE PLANTS follow from that roll rather than rolling separately, and
+   the pairing is the point. Against a blown-out ground they go almost
+   black -- SWELL_FG_DARK of full -- so the field reads as silhouettes
+   cut out of light. Against a dark or ordinary ground they land
+   somewhere between where the slider was and full, so the wool stays
+   the brightest thing on screen. Rolling the two independently would
+   have given washed-out flowers on a washed-out ground a third of the
+   time, which is the one combination with nothing to look at.
 
-let swellPhase = 'wait', swellT = 0, swellFor = 0, swellBase = 1.22, swellHi = 2;
+   Both maxima are read off the sliders' own max, the way
+   syncWanderBounds reads the walkers' bounds, so widening a control
+   widens this with it. Both extremes stay readable without any special
+   handling: the wordmark derives its colour from the backdrop, so it
+   flips light over the black and dark over the white on its own. */
+const SWELL_BRIGHT  = [0.80, 1.00];   // ground: share of full gain when bright
+const SWELL_FG_DARK = [0.00, 0.15];   // plants: share of full, under a bright ground
 
-const smooth = t => (t <= 0 ? 0 : t >= 1 ? 1 : t*t*(3 - 2*t));
+let swellBase = 1.22, swellHi = 2;      // ground: home, and full
+let swellFgBase = 1.35, swellFgHi = 2;  // plants: home, and full
 
 /* Called whenever wander starts, and whenever something else rewrites P
-   underneath it -- otherwise the swell would spend its next cycle
-   returning the ground to a base that has since been replaced. */
+   underneath it -- otherwise a later roll would return the gains to
+   bases that have since been replaced. */
 function resetSwell(){
   swellBase = P.bgGain;
-  const c = CONTROLS.find(x => x.k === 'bgGain');
-  swellHi = c ? c.max : 2;
-  swellPhase = 'wait'; swellT = 0; swellFor = rnd(SWELL_WAIT[0], SWELL_WAIT[1]);
+  swellFgBase = P.fgGain;
+  const cb = CONTROLS.find(x => x.k === 'bgGain');
+  const cf = CONTROLS.find(x => x.k === 'fgGain');
+  swellHi = cb ? cb.max : 2;
+  swellFgHi = cf ? cf.max : 2;
 }
 
-/* Returns true when it actually moved the gain, so the caller can fold
-   this into the same one-rebake-per-frame `needGround` flag the walkers
-   use. The holds return false on purpose: re-baking the tile to the
-   colour it already is costs 0.94ms for nothing. */
-function stepSwell(dt){
-  swellT += dt;
-  let v = null;
-  if(swellPhase === 'wait'){
-    if(swellT >= swellFor){ swellPhase = 'fall'; swellT = 0; swellFor = SWELL_FALL; }
-  }else if(swellPhase === 'fall'){
-    v = swellBase * (1 - smooth(swellT / swellFor));
-    if(swellT >= swellFor){
-      v = 0; swellPhase = 'dark'; swellT = 0;
-      swellFor = rnd(SWELL_DARK[0], SWELL_DARK[1]);
-    }
-  }else if(swellPhase === 'dark'){
-    v = 0;
-    if(swellT >= swellFor){
-      swellPhase = 'rise'; swellT = 0;
-      swellFor = rnd(SWELL_RISE[0], SWELL_RISE[1]);
-    }
-  }else if(swellPhase === 'rise'){
-    v = swellHi * smooth(swellT / swellFor);
-    if(swellT >= swellFor){ v = swellHi; swellPhase = 'back'; swellT = 0; swellFor = SWELL_BACK; }
-  }else{                                   // 'back'
-    v = swellHi + (swellBase - swellHi) * smooth(swellT / swellFor);
-    if(swellT >= swellFor){
-      v = swellBase; swellPhase = 'wait'; swellT = 0;
-      swellFor = rnd(SWELL_WAIT[0], SWELL_WAIT[1]);
-    }
-  }
-  if(v === null || Math.abs(v - P.bgGain) < 1e-4) return false;
-  P.bgGain = v;
-  return true;
+/* One roll per resow, and only while wander is running -- the gains are
+   part of the drift, not something a plain regrow should touch.
+   Re-bakes both here rather than going through schedule(): a resow is
+   already the expensive frame, and deferring the colour by a frame
+   would show the new field in the old light. */
+function rollSwell(){
+  if(!wandering) return;
+  const r = Math.random();
+  const bright = r >= 2/3;
+  if(r < 1/3) P.bgGain = 0;
+  else if(bright) P.bgGain = rnd(SWELL_BRIGHT[0], SWELL_BRIGHT[1]) * swellHi;
+  else P.bgGain = swellBase;
+
+  P.fgGain = bright
+    ? rnd(SWELL_FG_DARK[0], SWELL_FG_DARK[1]) * swellFgHi
+    : rnd(swellFgBase, swellFgHi);
+
+  rebakeGround();
+  rebakePlants();
+  syncWanderInputs();
 }
 /* Wordmark hue, carried outside P: the words expose a colour, not a
    hue, so this seeds from whatever colour is set when wander starts
@@ -981,9 +980,6 @@ function stepWander(dt){
     P[w.k] = v;
     if(w.ground) needGround = true; else needPlants = true;
   }
-  /* Folded into the walkers' flag rather than re-baking on its own, so a
-     frame where the swell and bgHue both move still costs one tile. */
-  if(stepSwell(dt)) needGround = true;
   /* Re-probe on a slow clock; ease toward the answer every frame, so
      the text glides rather than snapping each time it re-reads. */
   markT += dt;
@@ -1045,9 +1041,18 @@ function stepWander(dt){
    come from a bloom-only list built at sowing time, not from the whole
    field -- two thirds of the meadow is grass and stems, so picking at
    large would have made the rate below mean a third of what it says. */
-const BREATHE_UP     = 1.50;          // an up-step multiplies by this
+/* The two ends are deliberately lopsided. Growth is gentle and capped
+   close to the sown size; shrinking is still a halving, and the floor
+   stays all the way down at the grow-in start size. So a bloom climbs
+   in small steps and drops in big ones, and the field carries a
+   scattering of small flowers at any moment rather than everything
+   sitting near its sown size.
+   UP and HI move together on purpose: a step that overshoots the
+   ceiling would make the ceiling the only size a grown bloom can hold,
+   and the top of the range would quantise to one value. */
+const BREATHE_UP     = 1.20;          // an up-step multiplies by this
 const BREATHE_DOWN   = 0.50;          // a down-step multiplies by this
-const BREATHE_HI     = 1.50;          // 150% of the grow-in end size
+const BREATHE_HI     = 1.20;          // 120% of the grow-in end size
 const BREATHE_RATE   = 200;           // blooms started per second
 const BREATHE_EASE   = 0.9;           // ~1.1s time constant
 const BREATHE_REVERT = 0.45;          // how hard the coin leans back to 1.0
@@ -1107,11 +1112,14 @@ function syncWanderInputs(){
     i.el.value = P[w.k];
     if(i.out) i.out.textContent = (+P[w.k]).toFixed(w.k.endsWith('Hue') ? 0 : 2);
   }
-  /* ground gain is driven by the swell rather than by a walker, so it is
-     not in WANDER and has to be synced by hand. Setting .value does not
-     fire `input`, so this cannot loop back into the takeover below. */
-  const g = inputs.bgGain;
-  if(g){ g.el.value = P.bgGain; if(g.out) g.out.textContent = (+P.bgGain).toFixed(2); }
+  /* Both gains are driven by the resow roll rather than by a walker, so
+     they are not in WANDER and have to be synced by hand. Setting .value
+     does not fire `input`, so this cannot loop back into the takeover
+     below. */
+  for(const k of ['bgGain','fgGain']){
+    const g = inputs[k];
+    if(g){ g.el.value = P[k]; if(g.out) g.out.textContent = (+P[k]).toFixed(2); }
+  }
 }
 
 function setWander(on){
@@ -1141,7 +1149,7 @@ function setWander(on){
      transient, and stopping wander mid-fall would otherwise strand the
      ground at black. It goes home. */
   if(!on){
-    P.bgGain = swellBase;
+    P.bgGain = swellBase; P.fgGain = swellFgBase;
     rebakePlants(); rebakeGround(); syncWanderInputs(); breatheHome();   // land cleanly
   }
 }
@@ -1607,7 +1615,13 @@ function seed(){
   breathing.length = 0; breatheAcc = 0;
   blooms = plants.filter(p => p.a.role !== 'grass' && p.a.role !== 'stem');
 }
-window.regrow = ()=>seed();
+/* The resow triggers. Each rolls the ground's brightness as well --
+   rollSwell no-ops unless wander is running, so a plain regrow with the
+   colours at rest leaves the light alone. resize() and fonts.ready call
+   seed() directly and are deliberately NOT in here: neither is a resow
+   anybody asked for, and a window drag re-rolling the light would be
+   absurd. */
+window.regrow = ()=>{ rollSwell(); seed(); };
 /* clearings() -> the ellipses the last sow actually used, which is how
    you check a zone did what it was meant to rather than inferring it
    from where the flowers are not. */
@@ -1655,9 +1669,11 @@ function showView(name, resow){
      over the real one. */
   if(viz){
     if(vizGrowWas === null){ vizGrowWas = P.grow; P.grow = VIZ_GROW; }
+    if(vizGhostWas === null){ vizGhostWas = P.ghostOn; ghostMuted = false; setGhost(true); }
     resetViz();
-  }else if(vizGrowWas !== null){
-    P.grow = vizGrowWas; vizGrowWas = null;
+  }else if(vizGrowWas !== null || vizGhostWas !== null){
+    if(vizGrowWas !== null){ P.grow = vizGrowWas; vizGrowWas = null; }
+    if(vizGhostWas !== null){ setGhost(!!vizGhostWas); vizGhostWas = null; }
   }
   if(resow && booted) regrowNow();
   /* Deferred past boot on a cold load of #viz: setWander reads the
@@ -1689,7 +1705,7 @@ function resize(){
   vg.fillStyle = grad; vg.fillRect(0,0,vig.width,vig.height);
   /* Re-centre the hand, but deliberately NOT resetViz() -- that would
      restart the resow clock on every tick of a window drag. */
-  if(viz) resetDoodle();
+  if(P.ghostOn) resetDoodle();
   seed();
 }
 addEventListener('resize', resize);
@@ -1704,21 +1720,44 @@ function windAt(x,y,t){
 
 /* ---------- the brush -------------------------------------------- */
 const ptr = {x:-9999,y:-9999,px:-9999,py:-9999,vx:0,vy:0,live:false,touched:false};
-const ghost = {t:Math.random()*100, on:false};
+/* Seconds since the pointer last moved, which is what decides whether
+   the automated hand should be driving. Starts past GHOST_IDLE so a page
+   nobody touches picks the hand up on its own. */
+let ptrIdle = 99;
 
 function move(e){
   const x = e.clientX, y = e.clientY;
   if(!ptr.live){ ptr.px=x; ptr.py=y; ptr.live=true; }
-  ptr.x=x; ptr.y=y; ptr.touched=true; ghost.on=false;
+  ptr.x=x; ptr.y=y; ptr.touched=true;
+  ptrIdle = 0;
+  /* A real hand takes the brush back immediately, on any page. In the
+     visualizer the idle check below hands it straight back once you stop
+     -- otherwise one bumped desk would end the show for good. */
+  if(P.ghostOn) setGhost(false);
   if(hint.dataset.done!=='true') hint.dataset.done='true';
 }
 addEventListener('pointermove', move, {passive:true});
 addEventListener('pointerdown', move, {passive:true});
 addEventListener('pointerleave', ()=>{ ptr.live=false; ptr.x=ptr.y=-9999; });
 
-/* No pointer at all (touch device, or nobody home): a phantom gust
-   wanders so the page still shows what it does. */
-setTimeout(()=>{ if(!ptr.touched && !viz){ ghost.on=true; ptr.live=true; hint.dataset.done='true'; } }, 3200);
+/* How long the pointer has to sit still before the hand takes over. The
+   old one-shot 3.2s timeout did this once and never again; as a running
+   check it also covers the visualizer resuming after someone nudges the
+   mouse. */
+const GHOST_IDLE = 3.2;
+/* Unchecking the box is a decision; a pointer taking the brush is not.
+   Without telling those apart, unchecking `enable` in the visualizer
+   would be undone by the idle check 3.2 seconds later. */
+let ghostMuted = false;
+
+/* One place that flips it, so the checkbox, the pointer, the idle timer
+   and the visualizer cannot disagree about who is driving. */
+function setGhost(on){
+  P.ghostOn = on ? 1 : 0;
+  if(on){ ptr.live = true; resetDoodle(); hint.dataset.done = 'true'; }
+  const i = inputs.ghostOn;
+  if(i) i.el.checked = !!P.ghostOn;
+}
 
 /* ---------- the visualizer's hand --------------------------------- */
 /* The visualizer drives the brush itself: one continuous doodle, the
@@ -1894,25 +1933,22 @@ function stepDoodle(dt){
    loop rather than on a timer, so it advances with drawn time: a
    backgrounded tab does not queue up a burst of regrows to run the
    moment it comes back. */
-const VIZ_REGROW = [30, 40];         // seconds between resows
-/* The field takes longer to come up here than it does on the site. A
-   resow every half minute is most of what there is to watch, so the
-   grow-in is the show rather than something to get through. Saved and
-   restored around the mode, because P.grow is global and travels in
-   tune(). */
-const VIZ_GROW = 10;
-let vizRegrowIn = 0, vizGrowWas = null;
+const VIZ_REGROW = [15, 20];         // seconds between resows
+/* A touch quicker than the site's 6. At a resow every 15-20s the
+   grow-in has to be done well inside the cycle -- at 10s it was most of
+   what you ever saw, and the field barely had time to stand still
+   before being replaced. At 5 it reads as the field arriving rather
+   than as a permanent state. Saved and restored around the mode,
+   because P.grow is global and travels in tune(). */
+const VIZ_GROW = 5;
+let vizRegrowIn = 0, vizGrowWas = null, vizGhostWas = null;
 
 function resetViz(){
-  ghost.on = false;                  // the doodle takes the brush over
-  ptr.live = true;
-  resetDoodle();
   vizRegrowIn = rnd(VIZ_REGROW[0], VIZ_REGROW[1]);
 }
 
 
 function stepViz(dt){
-  stepDoodle(dt);
   vizRegrowIn -= dt;
   if(vizRegrowIn <= 0){
     vizRegrowIn = rnd(VIZ_REGROW[0], VIZ_REGROW[1]);
@@ -1971,15 +2007,23 @@ function frame(now){
   dt = Math.min(dt, 1/30); t += dt;
   if(!reduced) govern(dt);
 
-  /* The visualizer's hand wins over the phantom gust outright rather
-     than relying on resetViz having cleared ghost.on -- the 3.2s
-     no-pointer timeout can set that flag after the fact. */
-  if(viz) stepViz(dt);
-  else if(ghost.on){
-    ghost.t += dt;
-    ptr.x = W*(0.5 + 0.40*Math.sin(ghost.t*0.42)*Math.cos(ghost.t*0.17));
-    ptr.y = H*(0.5 + 0.36*Math.sin(ghost.t*0.31 + 1.1));
+  /* Who is driving the brush. A real pointer wins while it is moving;
+     once it has been still for GHOST_IDLE the hand takes over -- on a
+     page nobody has touched at all (which is what the old one-shot
+     timeout did) and, in the visualizer, every time. Elsewhere a hand
+     that has been dismissed by a real pointer stays dismissed until the
+     checkbox turns it back on. */
+  ptrIdle += dt;
+  if(!P.ghostOn && !ghostMuted && ptrIdle > GHOST_IDLE && (viz || !ptr.touched)){
+    setGhost(true);
   }
+  /* Scaling dt is what makes the speed slider a single number: it is a
+     pure time dilation, so the pen traces exactly the same figure, just
+     sooner. Scaling doodle.spd alone would have widened every curve
+     instead -- turn radius is speed over turn rate -- and the doodles
+     would have straightened out as they got faster. */
+  if(P.ghostOn) stepDoodle(dt * Math.max(0.05, P.ghostSpeed));
+  if(viz) stepViz(dt);
   ptr.vx = ptr.vx*0.78 + (ptr.x-ptr.px)*0.22;
   ptr.vy = ptr.vy*0.78 + (ptr.y-ptr.py)*0.22;
   ptr.px = ptr.x; ptr.py = ptr.y;
@@ -2101,6 +2145,13 @@ const CONTROLS = [
   {k:'fgGain',  l:'plant gain', min:0.2, max:2, step:0.01, cost:'plants'},
   {k:'ground',  l:'ground zoom', min:0.12, max:1.5, step:0.01, cost:'ground'},
   {k:'density', l:'density',  min:0.2,  max:4,   step:0.05, cost:'regrow', rg:1},
+  /* The automated hand gets a group of its own rather than living under
+     rustle, because it is not a property of the brush -- it is a second
+     thing holding it. Reachable on every page, so the doodle can be
+     switched on over the wordmark too, not only in the visualizer. */
+  {grp:'ghost'},
+  {k:'ghostOn',    l:'enable', type:'check'},
+  {k:'ghostSpeed', l:'speed',  min:0.25, max:12, step:0.05},
   {grp:'plant mix'},
   {k:'mixPurple', l:'purple flwrs', min:0, max:2, step:0.05, cost:'regrow', rg:1},
   {k:'mixWhite',  l:'white flwrs',  min:0, max:2, step:0.05, cost:'regrow', rg:1},
@@ -2145,10 +2196,12 @@ function cancelRegrow(){
 function queueRegrow(){
   cancelRegrow();
   setNote('regrowing…');
-  regrowTimer = setTimeout(()=>{ regrowTimer = null; seed(); setNote(noteIdle); }, REGROW_WAIT);
+  regrowTimer = setTimeout(()=>{
+    regrowTimer = null; rollSwell(); seed(); setNote(noteIdle);
+  }, REGROW_WAIT);
 }
 /* Anything that resows right now makes a pending one redundant. */
-function regrowNow(){ cancelRegrow(); seed(); setNote(noteIdle); }
+function regrowNow(){ cancelRegrow(); rollSwell(); seed(); setNote(noteIdle); }
 
 function syncPanel(){
   CONTROLS.forEach(c=>{
@@ -2211,6 +2264,10 @@ function buildPanel(){
       if(cost === 'mark') applyMark();
       if(cost === 'ground' || cost === 'plants') schedule(cost);
       if(rg) queueRegrow();
+      /* Straight assignment would set the flag without waking the pen:
+         setGhost is what re-centres the doodle and marks the pointer
+         live. Muting follows the box, so an unchecked one stays off. */
+      if(k === 'ghostOn'){ ghostMuted = !P[k]; setGhost(P[k]); }
     };
 
     el.addEventListener('input', ()=>{
@@ -2228,7 +2285,9 @@ function buildPanel(){
       const v = type === 'check' ? (el.checked ? 1 : 0)
               : type === 'color' ? el.value
               : +el.value;
-      if(wandering && (k === 'bgGain' || WANDER.some(w=>w.k===k))) setWander(false);
+      if(wandering && (k === 'bgGain' || k === 'fgGain' || WANDER.some(w=>w.k===k))){
+        setWander(false);
+      }
       P[k] = v;
       apply();
     });
@@ -2279,7 +2338,12 @@ function buildPanel(){
   document.getElementById('tWander').onclick = ()=>setWander(!wandering);
   document.getElementById('tRegrow').onclick = ()=>regrowNow();
   addEventListener('keydown', e=>{
-    if(e.key === 'c' && !e.metaKey && !e.ctrlKey && !e.altKey) show(panel.hidden);
+    /* `m` for mod, alongside the older `c`. It is the only way into the
+       panel in the visualizer, where the corner links are hidden -- so
+       the settings stay reachable on a page with nothing on it. */
+    if((e.key === 'm' || e.key === 'c') && !e.metaKey && !e.ctrlKey && !e.altKey){
+      show(panel.hidden);
+    }
     if(e.key === 'Escape') show(false);
     /* Space toggles wander. Skipped when a control has focus: a button
        or a slider already answers to space itself, so handling it here

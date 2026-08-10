@@ -146,6 +146,13 @@ the canvas, which has no size earlier).
   Non-overlapping: separation is tested on each glade's **largest**
   semi-axis, biggest placed first, shrinking on failure. Measured 0
   overlapping pairs in 2721, across 1280×800, 390×844 and 844×390.
+- **The hand is `ghost` in the panel** — an enable checkbox and a speed
+  slider, on every page, not just the visualizer. Speed is a pure time
+  dilation on the doodle (scaling `dt`), default **4**: 1.0 is the pace
+  it was first tuned at and read as too languid. Measured 158 px/s at 1
+  against 644 at 4. A real pointer takes the brush back; after
+  `GHOST_IDLE` of stillness the hand resumes, but only if the checkbox
+  was not deliberately unchecked (`ghostMuted`).
 - **A doodle drives the brush.** It writes `ptr.x/y` and nothing else,
   so the frame loop differences it into velocity and the physics cannot
   tell it from a hand. A continuously-moving pen: curvature is **set**
@@ -155,10 +162,11 @@ the canvas, which has no size earlier).
   them. A 6×4 grid drives re-aiming at stale cells so it covers the
   screen. Measured over 45s: 21/24 cells, 8.1 screen-widths, 90–236
   px/s, 10 edge frames in 2700. Replaces the `ghost` Lissajous.
-- **Resows itself** every 30–40s, counted in the frame loop so a
+- **Resows itself** every 15–20s, counted in the frame loop so a
   backgrounded tab does not bank a burst of them.
-- **Grow-in is 10s here**, not the site's 6 — the growing-in is most of
-  what there is to watch. `P.grow` is borrowed and restored on exit.
+- **Grow-in is 5s here**, not the site's 6. Measured: 5s growing then
+  11–13s of settled field per cycle, which is the window breathing
+  gets. `P.grow` is borrowed and restored on exit.
 
 `/viz` is a redirect stub at `viz/index.html`; GitHub Pages has no
 rewrites, so the alternative was a second copy of the whole engine at
@@ -206,21 +214,19 @@ sat to 0.60 of the rate it ran at, plant sat to 0.75 — via `every`, not
 The wordmark colour is **derived, not cycled** — a 24×12 readback of the
 box behind it, steered to the complementary hue with lightness flipped.
 
-**The gain swell** rides on top, on its own clock rather than as a fifth
-walker: base for 10–20s, down to 0 over 5s, black for 5–10s, up to full
-gain (the slider's max) over 3–5s, home over 4s. Smoothstepped, ~30–45s
-a cycle, one tile re-bake per frame while ramping and none while
-holding. Home is whatever `ground gain` was when wander started, and
-unlike hue/sat it **is** restored when wander stops. Not divided by
-`wander speed` — the durations are wall-clock.
-
-The corner link reads **`rest`** while running, with no underline (the
-label names the next click) and a slow pulse via stacked `text-shadow`.
-**Space toggles it.**
+**The gain roll** rides on the resow, not on a clock, and snaps rather
+than ramping. Ground rolls dark (0) / home (the slider's value when
+wander started) / bright (80–100% of max), equally likely; the plants
+follow from it — 0–15% of full under a bright ground, else between the
+slider's value and full. The pairing avoids washed-out flowers on a
+washed-out ground. Only while wander runs; both go home when it stops.
 
 ### breathing
-While wander runs, blooms change size: ×1.5 up or ×0.5 down, band
-`sizeFrom/size` to 1.5, 200 blooms/sec. Draw-time scale, so ~free.
+While wander runs, blooms change size: ×1.2 up or ×0.5 down, band
+`sizeFrom/size` to 1.2, 200 blooms/sec. Draw-time scale, so ~free.
+Lopsided on purpose — gentle growth, halving shrink — so the field
+carries small flowers throughout. Measured over 48s: mean holds at
+0.72–0.84, individuals span 0.13–1.2, 11–20% below half size.
 **The coin is not 50/50** — `BREATHE_FAIR` (0.631) is derived from the two
 step sizes, because halving is a bigger move than ×1.5 and a fair coin
 wilts the whole meadow.
@@ -234,6 +240,7 @@ Corner links **wander · regrow · mod**. `c` toggles, `Esc` closes,
 | **rustle** | amount (0–8) |
 | **wander** | speed |
 | **meadow** | ground hue/sat/gain, plant hue/sat/gain, ground zoom, density |
+| **ghost** | enable, speed — the automated hand, on any page |
 | **plant mix** | purple / white / yellow / pink flwrs, grass |
 
 Mix and density **queue a regrow 2s** after the last change.
@@ -272,8 +279,8 @@ is already past the ~1.2 where the clamp starts eating `bgHue`.
   settings 1 / 2 / 3, then **73.1° at 4, 5, 6 and 8**. `SWING_MAX` (1.5
   rad) clamps it. Above 4 no single plant swings further; what changes is
   how much of the field reaches that swing.
-- **Breathing holds.** Mean bloom size 0.90 from 30s to 60s while
-  individuals span 0.33–1.5. Mean sprite *area* comes out slightly below
+- **Breathing holds.** Mean bloom size 0.72–0.84 across 48s while
+  individuals span 0.13–1.2 and 11–20% sit below half size. Mean sprite *area* comes out slightly below
   rest, so no overdraw cost. 61fps idle, 61fps breathing, headed.
 - **Flower bands.** A flat 48px between every stacked pair from 390px
   wide to 1440.

@@ -129,15 +129,21 @@ first for what the project is and how to run it.
   view and the back caret. Views are switched by `[hidden]` and nothing
   else.
 - **Blooms breathe during wander, and the coin is not 50/50.** A bloom
-  eases ×1.5 up or ×0.5 down and stops there, in a band from
-  `sizeFrom/size` to 1.5. Halving is a bigger move than multiplying by
+  eases ×1.2 up or ×0.5 down and stops there, in a band from
+  `sizeFrom/size` to 1.2. `BREATHE_UP` and `BREATHE_HI` move together --
+  a step that overshoots the ceiling makes the ceiling the only size a
+  grown bloom can hold, and the top of the range quantises to one value.
+  The two ends are lopsided on purpose: gentle growth, halving shrink,
+  so the field carries small flowers throughout (measured, 11-20% of
+  blooms below half size at any moment, mean holding 0.72-0.84 over
+  48s). Halving is a bigger move than multiplying by
   1.5 — `ln 2` against `ln 1.5` — so a fair coin drifts the whole meadow
   downward and it settles at a fraction of its size after a couple of
   minutes, reading as the field wilting rather than breathing.
   `BREATHE_FAIR` is derived from the two step sizes so it stays right if
   they are re-tuned; `BREATHE_REVERT` pulls back toward the sown size on
-  top of it. Measured: mean size holds at 0.90 from 30s to 60s while
-  individual blooms span 0.33 to 1.5. It is a **draw-time scale**, like
+  top of it. Measured: mean size holds at 0.72-0.84 across 48s while
+  individual blooms span 0.13 to 1.2. It is a **draw-time scale**, like
   grow-in — one multiply on a transform already being computed — and it
   waits for the grow-in to finish, since two scale ramps at once fight
   each other. Mean sprite *area* comes out slightly below rest, so there
@@ -289,32 +295,56 @@ first for what the project is and how to run it.
   ignored outright. It predates the gain swell and applied to all four
   walker sliders; adding `bgGain` to the takeover is what surfaced it.
   The handler now captures `v` first and assigns after.
-- **The gain swell is not a fifth walker, and should not become one.**
-  Walkers bounce between bounds at a constant rate. The swell has
-  phases, a hold at each end, and a home to return to, so it is a small
-  state machine on its own clock (`stepSwell`). Three things to keep:
-  - **It returns a boolean and the caller ORs it into `needGround`.**
-    Calling `rebakeGround()` from inside it would double-bake any frame
-    where `bgHue` also stepped. And the holds must keep returning false
-    — re-baking the tile to the colour it already is costs 0.94ms for
-    nothing. Measured: 59.4 bakes/sec through a ramp, 24.5 through a
-    hold (all of the latter the hue walker's).
-  - **Gain goes home when wander stops; hue and sat do not.** Those are
-    left where they landed so `copy(tune())` captures a look you like.
-    A transient that stranded the ground at black is just a bug.
+- **The gain roll hangs off the RESOW, not a clock, and it snaps.** It
+  was once a five-phase machine on its own timer (wait, fall, hold,
+  rise, settle) and moving it onto the resow deleted two phases, three
+  timers and an easing function. The field is replaced in that same
+  frame, so the light changing with it reads as one event; easing it
+  smears one cut over five seconds and puts the light out of step with
+  the field. Four things to keep:
+  - **The plants follow the ground's roll, they do not roll
+    separately.** Bright ground pairs with near-black plants
+    (silhouettes); dark or ordinary ground pairs with bright plants.
+    Independent rolls give washed-out flowers on a washed-out ground a
+    third of the time, which is the one combination with nothing in it.
+  - **Both gains go home when wander stops; hue and sat do not.** Those
+    are left where they landed so `copy(tune())` captures a look. A
+    transient that stranded the ground at black is just a bug.
   - **`resetSwell()` has to run wherever something else rewrites `P`** —
-    `setWander(true)`, the reset button, `tune()`. Otherwise the swell
-    spends its next cycle hauling the ground back to a base that has
-    since been replaced.
-- **The swell is deliberately NOT divided by `wanderSpeed`.** Everything
-  else in that section is. The durations were specified in wall-clock
-  seconds, and dividing them would make "10-20 seconds" true at exactly
-  one setting of a slider.
+    `setWander(true)`, the reset button, `tune()`. Otherwise the next
+    roll returns the gains to bases that have since been replaced.
+  - **Only the deliberate resow paths call `rollSwell()`.** `resize()`
+    and `fonts.ready` call `seed()` directly and are deliberately not in
+    that list -- a window drag re-rolling the light would be absurd.
+- **Deleting a block can take a shared helper with it, and the page will
+  still load.** Rewriting the swell removed `const smooth` along with
+  the phase machine that happened to host it. Nothing referenced it
+  until a roll actually started a ramp, so page load was clean, the
+  console was clean, and every check passed -- then the first resow
+  threw `smooth is not defined` inside `stepSwell` and killed the rAF
+  loop for good. A dead render loop looks exactly like a still frame.
+  After removing a block, grep for what it defined, and exercise the
+  code path rather than trusting a quiet load.
 - **`#viz` is a route with no view element, and that is the mechanism,
   not an omission.** `showView` hides everything whose `data-view` does
   not match the name, so a name nothing claims hides every page at once.
   Do not "fix" it by adding a `data-view="viz"` element -- that would put
   a box back on screen and give the zone pass something to measure.
+- **`P.ghostOn` is flipped through `setGhost()` and nowhere else.** Four
+  things want to change it -- the checkbox, a real pointer arriving, the
+  idle timer, and the visualizer borrowing it -- and they will disagree
+  if any of them assigns directly. Assigning also skips the part that
+  matters: `setGhost(true)` re-centres the doodle and marks the pointer
+  live, so a bare `P.ghostOn = 1` sets a flag and wakes nothing.
+- **Unchecking `enable` must not be undone by the idle timer.** A
+  pointer taking the brush is temporary; unchecking the box is a
+  decision. Without `ghostMuted` telling those apart, unchecking it in
+  the visualizer is reversed 3.2 seconds later and the checkbox looks
+  broken.
+- **`ghostSpeed` scales `dt`, not `doodle.spd`.** It is a pure time
+  dilation, so the pen traces the same figure sooner. Scaling the speed
+  alone widens every curve instead -- turn radius is speed over turn
+  rate -- and the doodles straighten out as they get faster.
 - **A doodling hand is a PEN, not a sequence of hops, and its curvature
   must be SET rather than integrated.** Two wrong versions: point-to-
   point with rests read as isolated twitches (what makes a doodle human
