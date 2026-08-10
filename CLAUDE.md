@@ -279,6 +279,37 @@ first for what the project is and how to run it.
   three times *finer*. Both terms move together -- `step:5/3` with
   `every:0.25/3` -- which is why they are written as divisions in the
   table rather than as decimals.
+- **Read a slider's value BEFORE calling `setWander(false)`.** The
+  takeover in the `input` handler stops wander, `setWander(false)` calls
+  `syncWanderInputs()`, and that writes `P` back into the very elements
+  being dragged. So reading `el.value` afterwards hands back the
+  wander's value and discards the input that just arrived. This hid for
+  a long time because a drag fires `input` many times and only the first
+  is eaten — but a single **click on the slider track** was silently
+  ignored outright. It predates the gain swell and applied to all four
+  walker sliders; adding `bgGain` to the takeover is what surfaced it.
+  The handler now captures `v` first and assigns after.
+- **The gain swell is not a fifth walker, and should not become one.**
+  Walkers bounce between bounds at a constant rate. The swell has
+  phases, a hold at each end, and a home to return to, so it is a small
+  state machine on its own clock (`stepSwell`). Three things to keep:
+  - **It returns a boolean and the caller ORs it into `needGround`.**
+    Calling `rebakeGround()` from inside it would double-bake any frame
+    where `bgHue` also stepped. And the holds must keep returning false
+    — re-baking the tile to the colour it already is costs 0.94ms for
+    nothing. Measured: 59.4 bakes/sec through a ramp, 24.5 through a
+    hold (all of the latter the hue walker's).
+  - **Gain goes home when wander stops; hue and sat do not.** Those are
+    left where they landed so `copy(tune())` captures a look you like.
+    A transient that stranded the ground at black is just a bug.
+  - **`resetSwell()` has to run wherever something else rewrites `P`** —
+    `setWander(true)`, the reset button, `tune()`. Otherwise the swell
+    spends its next cycle hauling the ground back to a base that has
+    since been replaced.
+- **The swell is deliberately NOT divided by `wanderSpeed`.** Everything
+  else in that section is. The durations were specified in wall-clock
+  seconds, and dividing them would make "10-20 seconds" true at exactly
+  one setting of a slider.
 - **Colour is one 3×3 matrix**, composed from gain+tint, hue and
   saturation and applied in a single pass over the pixels. It is exactly
   the identity at the defaults, so the untouched case costs nothing. Use

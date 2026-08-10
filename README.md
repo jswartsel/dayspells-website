@@ -341,6 +341,47 @@ with wander running, worst frame 21ms against 18 idle.
 it looks, and how hard it chases what it sees. The corner links follow it,
 so the colour it stops on is the one you copy.
 
+### The gain swell
+
+Laid over wander on its own clock, rather than as a fifth walker —
+walkers bounce between bounds at a constant rate, and this has phases, a
+hold, and a home to return to. The ground waits **10–20s** at its base
+gain, darkens to **0 over 5s**, sits black for **5–10s**, blows out to
+full gain over **3–5s**, then settles home over **4s**. A cycle is
+roughly 30–45 seconds.
+
+"Full gain" is read off the `ground gain` slider's own max the same way
+`syncWanderBounds` reads the walkers' bounds, so widening the control
+widens the swell with it. At the current max of 2.0 the linen clips to
+white; at 0 it is black. Both ends stay readable without any special
+handling, because the wordmark already derives its colour from the
+backdrop — it flips light over the black and dark over the white on its
+own.
+
+"Home" is whatever `ground gain` was when wander started, so the default
+1.22 if nobody has touched it. Unlike hue and saturation, which are left
+wherever they landed so you can `copy(tune())` a combination you like,
+gain is **restored when wander stops** — a transient that stranded the
+ground at black would just be a bug. Dragging `ground gain` takes
+control back mid-swell, the same as the four walker sliders.
+
+Ramps are smoothstepped; linear has a corner at each end and reads as a
+cut rather than a swell. Only the 4s settle was a free choice — the
+other three durations were specified. There is no hold at full gain, so
+the top reads as a flash rather than a plateau.
+
+It costs one tile re-bake per frame while a ramp is moving (0.94ms) and
+**nothing at all** during the holds, because `stepSwell` reports whether
+it actually moved the gain and the caller folds that into the same
+one-rebake-per-frame flag the walkers use. Measured through a fall:
+60.3fps, 59.4 bakes/sec; through the hold, 24.5 bakes/sec, all of them
+the hue walker's. A full real-time cycle held 60.1fps, worst frame 22ms.
+
+`SWELL_WAIT` / `SWELL_FALL` / `SWELL_DARK` / `SWELL_RISE` / `SWELL_BACK`
+are the knobs. They are **not** divided by `wander speed`, unlike
+everything else in this section: the durations are wall-clock, and
+dividing them would make "10–20 seconds" true at exactly one setting.
+
 ### Breathing
 
 Wander changes the blooms' **size** as well as their colour. Flowers are

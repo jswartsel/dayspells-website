@@ -175,6 +175,14 @@ sat to 0.60 of the rate it ran at, plant sat to 0.75 — via `every`, not
 The wordmark colour is **derived, not cycled** — a 24×12 readback of the
 box behind it, steered to the complementary hue with lightness flipped.
 
+**The gain swell** rides on top, on its own clock rather than as a fifth
+walker: base for 10–20s, down to 0 over 5s, black for 5–10s, up to full
+gain (the slider's max) over 3–5s, home over 4s. Smoothstepped, ~30–45s
+a cycle, one tile re-bake per frame while ramping and none while
+holding. Home is whatever `ground gain` was when wander started, and
+unlike hue/sat it **is** restored when wander stops. Not divided by
+`wander speed` — the durations are wall-clock.
+
 The corner link reads **`rest`** while running, with no underline (the
 label names the next click) and a slow pulse via stacked `text-shadow`.
 **Space toggles it.**

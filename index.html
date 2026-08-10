@@ -845,6 +845,89 @@ const WANDER = [
    bgHue and bgSat only redo one small tile. Doubling them halves the
    cost and barely changes how the drift reads. */
 let wandering = false, plantQueue = 0;
+
+/* ---------- the gain swell ---------------------------------------- */
+/* A slow event laid over wander, on its own clock rather than as a
+   fifth walker: the ground darkens away to nothing, sits there, blows
+   out to full gain, then settles back to wherever `ground gain` was
+   when wander started -- which is the default 1.22 if nobody has
+   touched it. A walker could not do this. Walkers bounce between bounds
+   at a constant rate; this has phases, holds, and a home to return to.
+
+   `full gain` is read off the slider's own max, the same way
+   syncWanderBounds reads the walkers' bounds, so widening the control
+   widens the swell with it. At the current max of 2.0 the linen clips
+   to pure white, and at 0 it is black -- both ends are deliberate.
+
+   Only SWELL_BACK was not specified: the fall, the hold and the rise
+   all have stated durations and the settle home did not, so it is a
+   flat 4s, roughly the midpoint of the rise. There is no hold at full
+   gain either, so the top reads as a flash rather than a plateau; a
+   SWELL_PEAK phase would be a few lines if that is wanted.
+
+   Ramps are smoothstepped, not linear. A linear fade to black has a
+   corner at each end and reads as a cut rather than a swell.
+
+   Deliberately NOT divided by wanderSpeed, unlike everything else in
+   this section. The durations here were specified in wall-clock
+   seconds, and dividing them would make "10-20 seconds" true only at
+   one setting of a slider. Divide `dt` on the way in if that is ever
+   wanted instead. */
+const SWELL_WAIT = [10, 20];   // s at base before it begins again
+const SWELL_FALL = 5.0;        // s from base down to 0
+const SWELL_DARK = [5, 10];    // s held at 0
+const SWELL_RISE = [3, 5];     // s from 0 up to full gain
+const SWELL_BACK = 4.0;        // s from full gain back to base
+
+let swellPhase = 'wait', swellT = 0, swellFor = 0, swellBase = 1.22, swellHi = 2;
+
+const smooth = t => (t <= 0 ? 0 : t >= 1 ? 1 : t*t*(3 - 2*t));
+
+/* Called whenever wander starts, and whenever something else rewrites P
+   underneath it -- otherwise the swell would spend its next cycle
+   returning the ground to a base that has since been replaced. */
+function resetSwell(){
+  swellBase = P.bgGain;
+  const c = CONTROLS.find(x => x.k === 'bgGain');
+  swellHi = c ? c.max : 2;
+  swellPhase = 'wait'; swellT = 0; swellFor = rnd(SWELL_WAIT[0], SWELL_WAIT[1]);
+}
+
+/* Returns true when it actually moved the gain, so the caller can fold
+   this into the same one-rebake-per-frame `needGround` flag the walkers
+   use. The holds return false on purpose: re-baking the tile to the
+   colour it already is costs 0.94ms for nothing. */
+function stepSwell(dt){
+  swellT += dt;
+  let v = null;
+  if(swellPhase === 'wait'){
+    if(swellT >= swellFor){ swellPhase = 'fall'; swellT = 0; swellFor = SWELL_FALL; }
+  }else if(swellPhase === 'fall'){
+    v = swellBase * (1 - smooth(swellT / swellFor));
+    if(swellT >= swellFor){
+      v = 0; swellPhase = 'dark'; swellT = 0;
+      swellFor = rnd(SWELL_DARK[0], SWELL_DARK[1]);
+    }
+  }else if(swellPhase === 'dark'){
+    v = 0;
+    if(swellT >= swellFor){
+      swellPhase = 'rise'; swellT = 0;
+      swellFor = rnd(SWELL_RISE[0], SWELL_RISE[1]);
+    }
+  }else if(swellPhase === 'rise'){
+    v = swellHi * smooth(swellT / swellFor);
+    if(swellT >= swellFor){ v = swellHi; swellPhase = 'back'; swellT = 0; swellFor = SWELL_BACK; }
+  }else{                                   // 'back'
+    v = swellHi + (swellBase - swellHi) * smooth(swellT / swellFor);
+    if(swellT >= swellFor){
+      v = swellBase; swellPhase = 'wait'; swellT = 0;
+      swellFor = rnd(SWELL_WAIT[0], SWELL_WAIT[1]);
+    }
+  }
+  if(v === null || Math.abs(v - P.bgGain) < 1e-4) return false;
+  P.bgGain = v;
+  return true;
+}
 /* Wordmark hue, carried outside P: the words expose a colour, not a
    hue, so this seeds from whatever colour is set when wander starts
    and writes the result back into P.markColor as it turns. */
@@ -889,6 +972,9 @@ function stepWander(dt){
     P[w.k] = v;
     if(w.ground) needGround = true; else needPlants = true;
   }
+  /* Folded into the walkers' flag rather than re-baking on its own, so a
+     frame where the swell and bgHue both move still costs one tile. */
+  if(stepSwell(dt)) needGround = true;
   /* Re-probe on a slow clock; ease toward the answer every frame, so
      the text glides rather than snapping each time it re-reads. */
   markT += dt;
@@ -1012,11 +1098,19 @@ function syncWanderInputs(){
     i.el.value = P[w.k];
     if(i.out) i.out.textContent = (+P[w.k]).toFixed(w.k.endsWith('Hue') ? 0 : 2);
   }
+  /* ground gain is driven by the swell rather than by a walker, so it is
+     not in WANDER and has to be synced by hand. Setting .value does not
+     fire `input`, so this cannot loop back into the takeover below. */
+  const g = inputs.bgGain;
+  if(g){ g.el.value = P.bgGain; if(g.out) g.out.textContent = (+P.bgGain).toFixed(2); }
 }
 
 function setWander(on){
   wandering = on;
   if(on){
+    /* Captures the base the swell will return the ground to: whatever
+       the slider is at right now, or the 1.22 default if untouched. */
+    resetSwell();
     const hsl = hexToHsl(P.markColor);
     markH = hsl[0]; markS = hsl[1]; markL = hsl[2]; markT = PROBE_EVERY; swatchT = 0;
     const avg = sampleBackdrop();
@@ -1033,7 +1127,14 @@ function setWander(on){
     b.textContent = on ? 'rest' : 'wander';
     b.title = on ? 'at the wishing well' : 'lose the hour on a trail';
   }
-  if(!on){ rebakePlants(); rebakeGround(); syncWanderInputs(); breatheHome(); }  // land cleanly
+  /* Hue and sat are LEFT where they landed, so a combination you like
+     survives to be copied out of tune(). Gain is not: the swell is a
+     transient, and stopping wander mid-fall would otherwise strand the
+     ground at black. It goes home. */
+  if(!on){
+    P.bgGain = swellBase;
+    rebakePlants(); rebakeGround(); syncWanderInputs(); breatheHome();   // land cleanly
+  }
 }
 
 async function boot(){
@@ -1782,10 +1883,22 @@ function buildPanel(){
     };
 
     el.addEventListener('input', ()=>{
-      if(wandering && WANDER.some(w=>w.k===k)) setWander(false);
-      P[k] = type === 'check' ? (el.checked ? 1 : 0)
-           : type === 'color' ? el.value
-           : +el.value;
+      /* bgGain is not a walker, but the swell drives it, so dragging it
+         has to take control back the same way the other four do.
+         READ THE VALUE FIRST. setWander(false) calls syncWanderInputs(),
+         which writes P back into these very elements -- so reading
+         el.value after it would hand back the wander's value and throw
+         away the input that just arrived. During a drag this hid itself,
+         because `input` fires many times and only the first one is
+         eaten; a single click on the slider track was silently ignored
+         outright. That was true of the four walker sliders before the
+         swell existed, and adding bgGain to the takeover is what finally
+         made it show up. */
+      const v = type === 'check' ? (el.checked ? 1 : 0)
+              : type === 'color' ? el.value
+              : +el.value;
+      if(wandering && (k === 'bgGain' || WANDER.some(w=>w.k===k))) setWander(false);
+      P[k] = v;
       apply();
     });
 
@@ -1821,6 +1934,10 @@ function buildPanel(){
   document.getElementById('tReset').onclick  = ()=>{
     cancelRegrow();
     Object.assign(P, DEFAULTS); syncPanel(); applyMark(); rebakePlants(); rebakeGround(); seed();
+    /* P.bgGain has just been replaced, so the swell's idea of home is
+       stale -- without this it would spend its next cycle hauling the
+       ground back to the value reset just cleared. */
+    if(wandering) resetSwell();
     setNote(noteIdle);
   };
   /* The corner links sit above the panel and never move, so options
@@ -1866,6 +1983,7 @@ window.tune = obj=>{
   });
   cancelRegrow();
   syncPanel(); applyMark(); rebakePlants(); rebakeGround(); seed();
+  if(wandering) resetSwell();          // same staleness as reset, above
   return {...P};
 };
 
