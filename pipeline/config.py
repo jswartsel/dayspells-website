@@ -132,6 +132,40 @@ KEEP = [
 # Colour grade, baked into the assets so the browser does no per-frame work.
 GRADE = dict(saturation=1.26, value=1.16, contrast=0.97)
 
+# The ground gets its own grade, because the linen and the wool want
+# opposite things from one. A flower is a saturated mid-tone with a
+# channel down near zero, so it has room to be lifted; the linen is a
+# pale near-neutral whose three channels sit within ~50 of each other,
+# and lifting THAT just walks all three into the 255 ceiling together.
+# When they pin, the gap between brightest and darkest channel collapses
+# and the tile goes white -- which is chroma destroyed, not gained.
+#
+# Concretely, with one shared grade the shipped tile came out at
+# [187,198,150]: HSV saturation 0.244 against a flower's 0.838, and
+# luminance 0.755, which left the runtime bgGain slider clipping from
+# 1.23 up -- barely above its own 1.22 default. So the ground could
+# never get vivid: `sat` had almost no chroma to multiply, and `gain`
+# actively removed what there was.
+#
+# So this one darkens instead of lifting, and saturates harder. Lower
+# value buys headroom before the runtime gain clips; higher saturation
+# gives the runtime sat slider something to work with. Measured on the
+# tile, shipped values against these:
+#
+#                       tile HSV sat   tile lum   max reachable   clips
+#                                                 runtime sat     from
+#   sat 1.26 val 1.16       0.244        0.755        0.584        1.23
+#   sat 2.20 val 0.90       0.454        0.580        1.000        1.50
+#
+# The ground can now actually reach full saturation, and the default
+# bgGain of 1.22 no longer sits one hundredth below the clipping onset.
+# These are the least aggressive numbers that get there: pushing further
+# (2.5 / 0.86) buys headroom to 1.55 but darkens the resting ground more
+# than the complaint warranted. Saturation clipping in the tile is 0.72%
+# of pixels and the weave contrast holds (V std 32.0 -> 26.7), so the
+# texture survives; past about 2.5 it starts to flatten.
+GRADE_GROUND = dict(saturation=2.20, value=0.90, contrast=1.04)
+
 # --- ground ----------------------------------------------------------------
 # The tile comes from a dedicated photograph of bare linen rather than the
 # cleanest square hunted out of an embroidered panel: nothing to inpaint

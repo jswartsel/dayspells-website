@@ -110,6 +110,55 @@ there is nothing to rectify; and severing plants from each other is no
 longer wanted, which turned the hardest stage into the simplest one and
 recovered the flowers the old approach had to reject.
 
+## The two grades
+
+`config.GRADE` colours every plant asset; `config.GRADE_GROUND` colours
+the linen tile. They were one setting until it became clear the two
+materials want opposite things from it.
+
+A flower is a saturated mid-tone with a channel down near zero — average
+`[238,169,39]`, HSV saturation 0.838 — so it has room to be lifted. The
+linen is a pale near-neutral whose three channels sit within ~50 of each
+other, and lifting *that* just walks all three into the 255 ceiling
+together. When they pin, the gap between brightest and darkest channel
+collapses and the tile goes toward white, which is chroma destroyed, not
+gained.
+
+With one shared grade (`saturation 1.26, value 1.16`) the tile shipped at
+`[187,198,150]`: HSV saturation 0.244 against the flower's 0.838, and
+luminance 0.755, which left `bgGain` clipping from 1.23 — one hundredth
+above its own 1.22 default. So the ground could never get vivid. `sat`
+had almost no chroma to multiply, and `gain` actively removed what there
+was.
+
+`GRADE_GROUND` (`saturation 2.20, value 0.90, contrast 1.04`) darkens
+instead of lifting, and saturates harder:
+
+| | tile | HSV sat | luminance | max reachable runtime sat | clips from |
+|---|---|---|---|---|---|
+| shared grade | `[187,198,150]` | 0.244 | 0.755 | 0.584 | gain 1.23 |
+| ground grade | `[140,157,86]` | 0.449 | 0.580 | **1.000** | gain 1.50 |
+
+Measured live at `bgGain 1.22` with saturation at maximum, the ground
+computes to `[143,197,0]` — fully saturated, with **no** clipped
+channels — where the old tile managed `[217,254,104]` at 0.589.
+
+**The ground defaults moved with the tile**, to `bgGain 1.65` /
+`bgSat 0.38` — more gain and less saturation than before, which is the
+opposite of what the pale tile wanted and exactly what a darker, more
+saturated one needs. That lands the resting ground at `[223,235,188]`,
+luminance 0.898, near the old resting mood, with 0 clipped channels and
+the clipping onset out at 1.79. Hue is genuinely alive there now: 0° is
+pale green, 90° cyan, 180° lilac, 270° pink, all four distinct.
+
+These are the least aggressive numbers that get there. Pushing further
+(2.5 / 0.86) moves the clipping onset to 1.55 but darkens the resting
+ground more than the problem warranted. Saturation clipping inside the
+tile is 0.72% of pixels and the weave contrast holds (V std 32.0 → 26.7),
+so the texture survives; past about 2.5 it starts to flatten.
+
+The plants are deliberately untouched — `GRADE` is exactly as it was.
+
 ## How the page works
 
 Assets are baked once at load into single sprites with their contact
@@ -740,14 +789,24 @@ All four compose into a single 3×3 colour matrix, applied in one pass:
 gain and tint, then hue, then saturation. At the defaults it is exactly
 the identity, so nothing is touched until you move something.
 
-> **Gain and hue fight each other.** Gain above ~1.2 pushes pale material
-> out of gamut, and the clamp that brings it back flattens the hue away.
-> At `bgGain 1.51` the linen computes to `[343,313,202]` — two channels
-> clipped — so the ground hardly responds to hue at all. Saturated,
-> mid-tone assets are fine: a purple iris at `fgGain 1.44` is
-> `[216,79,230]`, nothing clipped, and rotates to a deep green at 180.
-> **If you want to use hue on the ground, drop `ground gain` to about
-> 1.0** — it is a slider in the meadow group now, not a `tune()` call.
+> **Gain clips a pale material toward white, and that destroys chroma.**
+> Vivid means a big gap between the brightest and darkest channel. A
+> flower has a channel down near zero, so the gap survives any gain; a
+> near-neutral linen has all three within ~50 of each other, so gain
+> walks them into the 255 ceiling together and the gap collapses. On the
+> old tile at max saturation the ground reached 0.589 at gain 1.0 and
+> 1.22, then fell to 0.463 at 1.6 and 0.328 at 2.0 — and at gain 2.0
+> with saturation at rest it computed to exactly `[255,255,255]`, white.
+>
+> Saturation compounds it, because `out = lum + s·(in − lum)` scales a
+> pixel's distance from its own grey and a near-neutral has almost none
+> to scale. The old tile started at HSV saturation 0.244 against a purple
+> iris's 0.838 — the flowers began 3.4× more saturated.
+>
+> **That is fixed at the source** — see `GRADE_GROUND` below. The tile is
+> darker and far more saturated, so both runtime sliders have something
+> to work with. The rule still holds for any tile though: past the
+> clipping onset, gain takes colour away rather than adding it.
 
 **Rustle amount** is a gain on the drawn angle, not just a harder shove.
 Driving it through the impulse alone doesn't work — a plant is inside the

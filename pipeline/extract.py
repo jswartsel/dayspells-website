@@ -224,8 +224,8 @@ def largest(m):
     return ((lab == 1 + np.argmax([st[i, cv2.CC_STAT_AREA] for i in range(1, n)])) * 255).astype(np.uint8)
 
 
-def grade(im):
-    g = C.GRADE
+def grade(im, g=None):
+    g = g or C.GRADE
     a = im[:, :, 3:] if im.shape[2] == 4 else None
     hsv = cv2.cvtColor(im[:, :, :3], cv2.COLOR_BGR2HSV).astype(np.float32)
     hsv[:, :, 1] = np.clip(hsv[:, :, 1] * g['saturation'], 0, 255)
@@ -395,7 +395,8 @@ def stage_linen():
     m = tile.reshape(-1, 3).mean(0)
     tile = np.clip((tile.astype(np.float32) - m) * 0.82 + m, 0, 255).astype(np.uint8)
 
-    cv2.imwrite(os.path.join(ASSETS, 'ground', f'linen-tile-{S}.png'), grade(tile))
+    cv2.imwrite(os.path.join(ASSETS, 'ground', f'linen-tile-{S}.png'),
+                grade(tile, getattr(C, 'GRADE_GROUND', None)))
     cv2.imwrite(os.path.join(WORK, 'linen_check.png'), cv2.resize(np.tile(tile, (3, 3, 1)), (600, 600)))
     print(f'  assets/ground/linen-tile-{S}.png  (3x3 preview in work/linen_check.png)')
 

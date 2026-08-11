@@ -282,7 +282,7 @@ committing so `dist/` keeps up.
 ```json
 {
   "rustle": 3, "speed": 0.7, "settle": 1.5, "radius": 150,
-  "bgTint": "#ffffff", "bgGain": 1.22, "bgHue": 0, "bgSat": 0.6,
+  "bgTint": "#ffffff", "bgGain": 1.65, "bgHue": 0, "bgSat": 0.38,
   "fgTint": "#ffffff", "fgGain": 1.35, "fgHue": 0, "fgSat": 0.8,
   "ground": 0.34, "density": 1.8,
   "sizeFrom": 0.2, "size": 1.7, "grow": 6,
@@ -297,8 +297,9 @@ returned by `tune()`: `speed`, `settle`, `radius`, `bgTint`, `fgTint`,
 `markSize`, `markColor`, `sizeFrom`, `autothin`. (`size` and `grow` are
 back in the panel under **grow in**.)
 `bgGain` **does** have a slider now (`ground gain`, 0.2–2), which is the
-one to reach for when ground hue seems unresponsive — the 1.22 default
-is already past the ~1.2 where the clamp starts eating `bgHue`.
+one to reach for if ground hue ever seems unresponsive. With the ground's
+own grade the tile is darker and more saturated, so the 1.65 default sits
+below the 1.79 clipping onset rather than on top of it as 1.22 used to.
 
 ---
 
@@ -392,9 +393,12 @@ Full list in `CLAUDE.md`. The five that cost the most:
   blocks is the real fix.
 - **`.mark` overhangs the viewport by ~6px** below 900px wide in
   landscape. Empty padding only; type keeps 39–48px of clearance.
-- **`GRADE` is tuned for the old darker panels and overshoots.** The 2026
-  linen is `#e3cf86` as shot; the grade pushes the tile to `#fbdd7e`.
-  A look decision, flagged and not settled.
+- **The ground has its own grade now** (`GRADE_GROUND`), because the
+  linen and the wool want opposite things from one. The shared grade
+  lifted the pale linen toward white, which cost it chroma: tile HSV sat
+  0.244 and clipping from `bgGain` 1.23 — one hundredth above its own
+  default. Now sat 0.449, lum 0.755 → 0.580, clipping from 1.50, and the
+  ground can reach full saturation where it used to stop at 0.589.
 - **No favicon** — a stray `/favicon.ico` 404.
 - **`photos/` is 55MB**, committed so extraction is reproducible. First
   thing to move if repo size bites.

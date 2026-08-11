@@ -462,7 +462,11 @@ const DEFAULTS = {
   /* Hue is the one-slider mood control: it rotates every colour at once
      and keeps the relationships between them, so the wool still reads as
      wool at 200 degrees round. Saturation runs from grey to lurid. */
-  bgTint: '#ffffff', bgGain: 1.22, bgHue: 0, bgSat: 0.60,
+  /* Re-set for the ground's own grade (config.GRADE_GROUND). The tile is
+     darker and much more saturated at source now, so the resting look
+     wants less saturation from the slider and more gain to bring the
+     luminance back up -- the opposite of the old pale tile's needs. */
+  bgTint: '#ffffff', bgGain: 1.65, bgHue: 0, bgSat: 0.38,
   fgTint: '#ffffff', fgGain: 1.35, fgHue: 0, fgSat: 0.80,
 
   ground:  0.34,   // linen tile scale. lower = finer weave, more zoomed out

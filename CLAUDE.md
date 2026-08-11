@@ -453,31 +453,36 @@ first for what the project is and how to run it.
   the identity at the defaults, so the untouched case costs nothing. Use
   the sRGB luminance coefficients (0.213/0.715/0.072) the SVG filter spec
   uses, or hue rotation stops holding its brightness.
-- **Gain above ~1.2 eats the hue control.** Bright material goes out of
-  gamut and the output clamp flattens the difference: at `bgGain 1.51`
-  the linen computes to `[343,313,202]`, two channels clipped, and the
-  ground barely responds to `bgHue`. This is gamut, not a bug — no colour
-  space fixes it. Mid-tone assets are unaffected. If someone reports the
-  hue slider "not doing anything", check their gain first — `ground gain`
-  is a slider in the meadow group now, so the fix is a drag toward 1.0
-  rather than a `tune()` call. Measured on the baked tile: `[181,188,156]`
-  at gain 1.0, `[221,229,191]` at the 1.22 default, two channels pinned at
-  255 by 1.6, and pure white by 2.0.
+- **Gain clips a PALE material toward white, which destroys chroma.**
+  Neon is a big gap between the brightest and darkest channel. The linen
+  is a near-neutral whose three channels sit within ~50 of each other,
+  so gain walks all three into the 255 ceiling at nearly the same moment
+  and the gap collapses; a flower has a channel down near zero, so its
+  gap survives. That is why the ground looked washed out at settings
+  that made the flowers neon, and why turning ground gain UP made it
+  worse rather than better. Measured on the old tile at max saturation:
+  0.589 output saturation at gain 1.0 and 1.22, 0.463 at 1.6, 0.328 at
+  2.0, and at gain 2.0 / sat 1.0 exactly `[255,255,255]` — white.
+  Saturation compounds it: `out = lum + s*(in - lum)` scales a pixel's
+  distance from its own grey, and a near-neutral has almost none to
+  scale. The old tile started at HSV saturation 0.244 against a purple
+  iris's 0.838.
+  **This is fixed at the source now, not at runtime** — see
+  `GRADE_GROUND` in `config.py`. The tile is darker and far more
+  saturated, so the runtime sliders have both headroom and chroma to
+  work with. If someone still reports hue or sat "not doing anything",
+  check the gain: past the clipping onset the same collapse applies to
+  any tile.
 
 ## Known issues, not yet fixed
 
-1. **`GRADE` is tuned for the old, darker panels and now overshoots.** The
-   2026 linen is `#e3cf86` as shot; the grade pushes the ground tile to
-   `#fbdd7e`, a much brighter, more clipped yellow. The old panels' linen
-   was olive `#8c762d`, so the page's whole mood has shifted paler. This
-   is a look decision, not a bug — flagged with the user, not yet settled.
-2. **Faint linen fringe** survives on a few petal tips. Raising
+1. **Faint linen fringe** survives on a few petal tips. Raising
    `FG_THRESHOLD` trades it against eating thin stems.
-3. **`daffodil-a` carries a small white scrap** at its base, left behind
+2. **`daffodil-a` carries a small white scrap** at its base, left behind
    when the narcissus it was fused to was split off.
-4. **The clearing behind the wordmark can read as a bald patch** on some
+3. **The clearing behind the wordmark can read as a bald patch** on some
    seeds. It's density thinning (an ellipse in `seed()`), not a wash.
-5. **Faint vertical slub in the ground tile** repeats at 512px. It's real
+4. **Faint vertical slub in the ground tile** repeats at 512px. It's real
    fabric texture, but visible on narrow viewports.
 
 Fixed since the first pass: the crocus linen fringe is much reduced, and
