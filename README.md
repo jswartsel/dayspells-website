@@ -420,6 +420,31 @@ wordmark's and end up matted. Sowing needs a tighter
 crowding radius, since at the default the zone is already packed and
 every extra blade is refused.
 
+## Where the knobs are
+
+Two places, and the split is deliberate.
+
+**`DEFAULTS`**, near the top of the script, is what the panel edits and
+what `tune()` reads and writes — every value with a slider, plus the few
+that are live in `P` but have no control.
+
+**`TUNING`**, immediately after it, is everything else worth adjusting:
+the visualizer's cadence and borrowed sizes, the glade shape and count,
+the gain-roll odds and ranges, the automated hand, breathing, and the
+zone pads. These used to be scattered through the file beside the code
+they govern, which reads well and adjusts badly. The values now sit
+together; the reasoning for each still lives beside its code.
+
+Changing one and reloading is the whole workflow — `index.html` is the
+site, there is no build step for the page. Re-run `pipeline/build.py`
+before committing so `dist/` keeps up.
+
+Two sets stayed put on purpose: the `WANDER` table, because it carries
+per-walker state as well as intervals and belongs with its stepper; and
+the engine constants `SHRINK` / `WEIGHT` / `CLUSTER` / `FORCE` /
+`SWING_MAX` / `BRUSH`, which shape the field itself rather than its
+behaviour over time.
+
 ## Tuning panel
 
 Three links sit in the top-right corner, set in the wordmark's face and
@@ -495,6 +520,12 @@ roll rather than rolling separately:
 | **home** | whatever `ground gain` was when wander started | between the slider's value and full |
 | **bright** | 80–100% of the slider's maximum | **0–5% of full** |
 
+The split is **20 / 40 / 40** — dark is the rarest, and `home` and
+`bright` stay level with each other. It is written as `SWELL_ODDS`,
+three *weights* that are normalised at roll time rather than a pair of
+cumulative cutoffs, so changing one does not silently resize another.
+Measured over 3000 rolls: 20.8% / 39.5% / 39.7%.
+
 The pairing is the point. Against a blown-out ground the plants go
 very nearly black — measured across 60 bright rolls, 0.03% to 4.99% of
 full, a peak gain of 0.10 — and the field reads as silhouettes cut out
@@ -504,8 +535,7 @@ screen. Rolling the two independently would give washed-out flowers on a
 washed-out ground a third of the time — the one combination with nothing
 to look at.
 
-Measured over 600 rolls: 33.7% / 33.3% / 33.0%, bright landing between
-80.1% and 99.8% of max. Across six live auto-resows: ground 1.76 / 1.98
+Bright lands between 80.1% and 99.8% of max. Across six live auto-resows: ground 1.76 / 1.98
 with plants 0.19 / 0.29, and ground 0 / 0 / 1.22 with plants 1.72 / 1.80
 / 1.60 — the pairing holds every time.
 

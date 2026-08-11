@@ -221,8 +221,10 @@ box behind it, steered to the complementary hue with lightness flipped.
 **The gain roll** rides on the resow, not on a clock, and snaps rather
 than ramping. Ground rolls dark (0) / home (the slider's value when
 wander started) / bright (80–100% of max), equally likely; the plants
-follow from it — 0–5% of full under a bright ground (measured 0.03–4.99%), else between
-the slider's value and full. The pairing avoids washed-out flowers on a
+follow from it — 0–5% of full under a bright ground, else between the slider's value and
+full. Odds are **20 / 40 / 40** (dark / home / bright), written as
+normalised weights in `SWELL_ODDS`; measured 20.8 / 39.5 / 39.7 over
+3000 rolls. The pairing avoids washed-out flowers on a
 washed-out ground. Only while wander runs; both go home when it stops.
 
 ### breathing
@@ -251,6 +253,21 @@ Corner links **wander · regrow · mod**. `c` toggles, `Esc` closes,
 Mix and density **queue a regrow 2s** after the last change.
 **There is no `copy json` button** — `copy(tune())` in the console does
 the same job; `tune()` with no argument returns the current set.
+
+---
+
+## 5b. Where the knobs live
+
+- **`DEFAULTS`** — everything the panel edits and `tune()` round-trips.
+- **`TUNING`**, right after it — every other adjustable number: `VIZ_*`,
+  `GLADE_*`, `SWELL_*`, `DOODLE_*` + `GHOST_IDLE`, `BREATHE_*`,
+  `ZONE_*`. Values together, reasoning still beside the code.
+- Deliberately left in place: the `WANDER` table (carries per-walker
+  state, belongs with its stepper) and the engine constants `SHRINK` /
+  `WEIGHT` / `CLUSTER` / `FORCE` / `SWING_MAX` / `BRUSH`.
+
+Edit, reload — `index.html` is the site. Re-run `build.py` before
+committing so `dist/` keeps up.
 
 ---
 

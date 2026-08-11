@@ -595,6 +595,77 @@ function mixOf(a){
 }
 const P = {...DEFAULTS};
 
+/* ==================================================================
+   TUNING -- every knob worth turning, in one place.
+
+   DEFAULTS above is what the panel edits and what tune() reads and
+   writes; this block is the set of numbers that shape behaviour and
+   have no slider. They were scattered across the file next to the code
+   they govern, which is fine for reading it and miserable for adjusting
+   it. The reasoning for each still lives beside that code -- these are
+   the values, the comments there are the why.
+
+   Everything here is a plain const, so changing one and reloading is
+   the whole workflow. Nothing needs a rebuild; index.html is the site.
+   (Re-run pipeline/build.py before committing so dist/ keeps up.)
+   ================================================================== */
+
+/* ---- the visualizer (#viz) --------------------------------------- */
+const VIZ_REGROW = [45, 60];   // s between automatic resows
+const VIZ_GROW   = 5;          // s of grow-in; borrows P.grow
+const VIZ_SIZE   = 1.275;      // final plant size; borrows P.size, re-bakes
+
+/* ---- glades: the visualizer's invented clearings ----------------- */
+const GLADE_COUNT  = [0, 3];        // how many per sow, inclusive; 0 is deliberate
+const GLADE_AX     = [0.08, 0.18];  // horizontal semi-axis, share of min(W,H)
+const GLADE_ASPECT = [0.70, 1.30];  // vertical semi-axis as a multiple of ax
+const GLADE_INSET  = 0.16;          // keep centres this far in, as a share of W/H
+const GLADE_GAP    = 1.04;          // sum-of-radii multiple; >1 leaves daylight
+const GLADE_TRIES  = 40;            // placement attempts before shrinking
+const GLADE_SHRINKS = 4;            // shrink rounds before giving up
+const GLADE_SHRINK = 0.85;          // how much each of those shrinks by
+
+/* ---- the gain roll, on every resow while wander runs -------------- */
+/* Weights, normalised at roll time -- write whatever split you want. */
+const SWELL_ODDS    = {dark: 20, home: 40, bright: 40};
+const SWELL_BRIGHT  = [0.80, 1.00];  // ground: share of full gain when bright
+const SWELL_FG_DARK = [0.00, 0.05];  // plants: share of full, under a bright ground
+
+/* ---- the automated hand ------------------------------------------ */
+const GHOST_IDLE   = 3.2;          // s of stillness before it takes the brush
+const DOODLE_SPEED = [0.09, 0.30]; // share of min(W,H) travelled per second
+const DOODLE_GUST  = [1.8, 4.0];   // s between speed re-rolls
+const DOODLE_CURL  = 0.95;         // rad/s of aimless bend at full swing
+const DOODLE_PULL  = 0.80;         // rad/s toward the area it is heading for
+const DOODLE_TURN  = 2.20;         // rad/s ceiling, so bends stay broad
+const DOODLE_AIM   = [2.5, 5.5];   // s before it picks a new area
+const DOODLE_CELLS = [6, 4];       // coverage grid it steers around
+const DOODLE_EDGE  = 0.14;         // share of span kept clear of the edges
+
+/* ---- breathing: bloom size while wander runs --------------------- */
+/* UP and HI move together, or the ceiling becomes the only size a
+   grown bloom can hold. BREATHE_FAIR is derived from UP and DOWN
+   further down, so it stays correct if these are re-tuned. */
+const BREATHE_UP     = 1.20;   // an up-step multiplies by this
+const BREATHE_DOWN   = 0.50;   // a down-step multiplies by this
+const BREATHE_HI     = 1.20;   // ceiling, as a share of the grow-in end size
+const BREATHE_RATE   = 200;    // blooms started per second
+const BREATHE_EASE   = 0.9;    // ~1.1s time constant
+const BREATHE_REVERT = 0.45;   // how hard the coin leans back toward 1.0
+
+/* ---- clearings around type (and around glades) ------------------- */
+const ZONE_PAD_X = 0.18;   // em, added to the half-box across
+const ZONE_PAD_Y = 0.65;   // em, added to the half-box down
+const ZONE_TOP   = 0.60;   // shortens the PAD above the type, not the semi-axis
+const ZONE_CLEAR = 10;     // px a bloom must clear the type by
+const ZONE_GRASS = 0.15;   // share of natural grass density kept in a clearing
+
+/* Not here on purpose: the WANDER table (it carries per-walker state
+   as well as intervals, so it lives with its stepper), and the engine
+   constants SHRINK / WEIGHT / CLUSTER / FORCE / SWING_MAX / BRUSH,
+   which shape the field itself rather than its behaviour over time. */
+
+
 /* Plants are sown in clusters, not one at a time: a flower head is
    paired with a stem beneath it, and heads come 1-3 to a clump. */
 const CLUSTER = {flower:[1,3], grass:[2,4]};
@@ -914,8 +985,11 @@ let wandering = false, plantQueue = 0;
    widens this with it. Both extremes stay readable without any special
    handling: the wordmark derives its colour from the backdrop, so it
    flips light over the black and dark over the white on its own. */
-const SWELL_BRIGHT  = [0.80, 1.00];   // ground: share of full gain when bright
-const SWELL_FG_DARK = [0.00, 0.05];   // plants: share of full, under a bright ground
+/* WEIGHTS, not thresholds. They are normalised at roll time, so these
+   can be any numbers that express the split you want and the code does
+   the arithmetic -- no pair of cumulative cutoffs to keep in step, which
+   is what these were before and the thing that made changing one of
+   them quietly resize another. */
 
 let swellBase = 1.22, swellHi = 2;      // ground: home, and full
 let swellFgBase = 1.35, swellFgHi = 2;  // plants: home, and full
@@ -939,11 +1013,14 @@ function resetSwell(){
    would show the new field in the old light. */
 function rollSwell(){
   if(!wandering) return;
-  const r = Math.random();
-  const bright = r >= 2/3;
-  if(r < 1/3) P.bgGain = 0;
-  else if(bright) P.bgGain = rnd(SWELL_BRIGHT[0], SWELL_BRIGHT[1]) * swellHi;
-  else P.bgGain = swellBase;
+  const o = SWELL_ODDS;
+  let r = Math.random() * (o.dark + o.home + o.bright);
+  const dark = (r -= o.dark) < 0;
+  const home = !dark && (r -= o.home) < 0;
+  const bright = !dark && !home;
+  if(dark) P.bgGain = 0;
+  else if(home) P.bgGain = swellBase;
+  else P.bgGain = rnd(SWELL_BRIGHT[0], SWELL_BRIGHT[1]) * swellHi;
 
   P.fgGain = bright
     ? rnd(SWELL_FG_DARK[0], SWELL_FG_DARK[1]) * swellFgHi
@@ -1067,12 +1144,6 @@ function stepWander(dt){
    UP and HI move together on purpose: a step that overshoots the
    ceiling would make the ceiling the only size a grown bloom can hold,
    and the top of the range would quantise to one value. */
-const BREATHE_UP     = 1.20;          // an up-step multiplies by this
-const BREATHE_DOWN   = 0.50;          // a down-step multiplies by this
-const BREATHE_HI     = 1.20;          // 120% of the grow-in end size
-const BREATHE_RATE   = 200;           // blooms started per second
-const BREATHE_EASE   = 0.9;           // ~1.1s time constant
-const BREATHE_REVERT = 0.45;          // how hard the coin leans back to 1.0
 /* The coin that leaves the walk standing still, given the two steps. */
 const BREATHE_FAIR   = Math.log(1/BREATHE_DOWN) /
                        (Math.log(BREATHE_UP) + Math.log(1/BREATHE_DOWN));
@@ -1291,7 +1362,6 @@ function seed(){
      the margin of a one-line one, and gives a four-letter word a quarter
      of the wordmark's. These two numbers reproduce the old hand-tuned
      wordmark clearing to within a pixel (383x100 against 383x101). */
-  const ZONE_PAD_X = 0.18, ZONE_PAD_Y = 0.65;   // em, added to the half-box
   /* Each clearing is cut short above its type so flower heads come
      closer from the top, and left full below. It shortens the PAD, not
      the whole semi-axis: scale the axis and a two-line paragraph loses
@@ -1300,7 +1370,6 @@ function seed(){
      the pad, the clearance above type is a flat 0.39em whatever the type
      is, and the wordmark's clearing comes out within 3px of the value it
      was hand-tuned to. */
-  const ZONE_TOP = 0.60;
 
   /* Two kinds of clearing, same geometry. data-zone is grass-only: the
      wordmark and the sub-pages' one-line messages, which want something
@@ -1316,7 +1385,6 @@ function seed(){
      than merely touching it -- 10px, which is the clearance the laptop
      proportional pad already gives. Where that pad is bigger the floor
      does nothing at all; on a phone it is what makes the zone work. */
-  const ZONE_CLEAR = 10;
   const bl = ASSETS.filter(a => a.role !== 'grass' && a.role !== 'stem');
   const TYPICAL = 0.9;                  // the field's usual per-plant scale
   const mean = f => bl.length ? bl.reduce((t,a)=>t+f(a), 0)/bl.length : 0;
@@ -1370,21 +1438,20 @@ function seed(){
      large draws degrades in size rather than in separation; and a
      best-effort fallback that keeps whichever candidate was furthest
      from its neighbours, so a glade is never silently dropped. */
+  /* Constants for all of this live in the TUNING block at the top of the
+     script. Including zero in GLADE_COUNT is the point: four out of four
+     sows having glades made them a feature of the page rather than
+     something that happens, and an empty list is safe all the way down
+     -- inAny() returns false on it and the top-up pass is guarded by
+     zones.length. */
   if(viz){
-    const GLADE_GAP = 1.04;    // sum-of-radii multiple: >1 leaves daylight
-    const GLADE_TRIES = 40, GLADE_SHRINKS = 4, GLADE_SHRINK = 0.85;
-    /* 0 to 3, drawn fresh on every resow -- so a sow can come up with no
-       clearings at all and read as unbroken field. That is the point of
-       including zero: four out of four sows having glades made them a
-       feature of the page rather than something that happens. An empty
-       list is safe all the way down -- inAny() returns false on it and
-       the top-up pass is guarded by zones.length. */
-    const span = Math.min(W, H), n = (Math.random()*4)|0;
+    const span = Math.min(W, H);
+    const n = GLADE_COUNT[0] + ((Math.random()*(GLADE_COUNT[1]-GLADE_COUNT[0]+1))|0);
     const glades = [];
     const sizes = [];
     for(let i=0;i<n;i++){
-      const ax = Math.max(rnd(0.08, 0.18) * span, bhw);
-      sizes.push({ax, ay: Math.max(ax * rnd(0.70, 1.30), bhh)});
+      const ax = Math.max(rnd(GLADE_AX[0], GLADE_AX[1]) * span, bhw);
+      sizes.push({ax, ay: Math.max(ax * rnd(GLADE_ASPECT[0], GLADE_ASPECT[1]), bhh)});
     }
     sizes.sort((a,b)=>Math.max(b.ax,b.ay) - Math.max(a.ax,a.ay));
 
@@ -1393,7 +1460,8 @@ function seed(){
       for(let round = 0; round <= GLADE_SHRINKS && !placed; round++){
         const r = Math.max(ax, ay);
         for(let tries = 0; tries < GLADE_TRIES; tries++){
-          const x = rnd(0.16, 0.84) * W, y = rnd(0.16, 0.84) * H;
+          const x = rnd(GLADE_INSET, 1 - GLADE_INSET) * W,
+                y = rnd(GLADE_INSET, 1 - GLADE_INSET) * H;
           /* Ratio rather than raw distance, so the best-effort fallback
              compares like with like across differently sized glades. */
           let score = Infinity;
@@ -1467,7 +1535,6 @@ function seed(){
   const rise = (a, sc)=>(a.dh*0.55 + a.stem) * sc;
   /* Multiplier on the clearing's natural grass density. Above 1 the
      pass sows more, below 1 it thins -- 1.20 was too thick. */
-  const ZONE_GRASS = 0.15;
 
   const CELL = 16, grid = new Map();
   function crowded(x,y,r){
@@ -1714,8 +1781,17 @@ function resize(){
   const wasDPR = DPR;
   DPR = pickDPR();
   if(DPR !== wasDPR && ASSETS.length) rebakePlants();
-  W = innerWidth; H = innerHeight;
-  canvas.width = Math.round(W*DPR); canvas.height = Math.round(H*DPR);
+  /* Floored at 1. A viewport can report 0 at load -- a hidden iframe, a
+     tab restored in the background, an embedding pane that has not been
+     given a size yet -- and a 0x0 canvas makes a 0x0 vignette, which
+     throws InvalidStateError the first time it is blitted. That throw
+     lands inside frame(), BEFORE its requestAnimationFrame, so the loop
+     does not just skip a frame, it stops for good: the meadow freezes
+     and never recovers even once a real size arrives. Observed exactly
+     that way. A 1x1 canvas is harmless by comparison. */
+  W = Math.max(1, innerWidth); H = Math.max(1, innerHeight);
+  canvas.width = Math.max(1, Math.round(W*DPR));
+  canvas.height = Math.max(1, Math.round(H*DPR));
   canvas.style.width = W+'px'; canvas.style.height = H+'px';
   ctx.setTransform(DPR,0,0,DPR,0,0);
   /* Baked to a bitmap once per resize. Filling a radial gradient
@@ -1771,7 +1847,6 @@ addEventListener('pointerleave', ()=>{ ptr.live=false; ptr.x=ptr.y=-9999; });
    old one-shot 3.2s timeout did this once and never again; as a running
    check it also covers the visualizer resuming after someone nudges the
    mouse. */
-const GHOST_IDLE = 3.2;
 /* Unchecking the box is a decision; a pointer taking the brush is not.
    Without telling those apart, unchecking `enable` in the visualizer
    would be undone by the idle check 3.2 seconds later. */
@@ -1840,14 +1915,6 @@ function setGhost(on){
    number you actually want to tune. The phases re-roll per reset so it
    does not retrace the same figure -- which was the whole complaint
    about the Lissajous ghost. */
-const DOODLE_SPEED = [0.09, 0.30];   // share of min(W,H) travelled per second
-const DOODLE_GUST  = [1.8, 4.0];     // s between speed re-rolls
-const DOODLE_CURL  = 0.95;           // rad/s of aimless bend at full swing
-const DOODLE_PULL  = 0.80;           // rad/s toward the area it is heading for
-const DOODLE_TURN  = 2.20;           // rad/s ceiling, so bends stay broad
-const DOODLE_AIM   = [2.5, 5.5];     // s before it picks a new area
-const DOODLE_CELLS = [6, 4];         // coverage grid
-const DOODLE_EDGE  = 0.14;           // share of span kept clear of the edges
 
 const doodle = {
   x:0, y:0, head:0, w:0, spd:0, want:0, clock:0,
@@ -1960,7 +2027,6 @@ function stepDoodle(dt){
    loop rather than on a timer, so it advances with drawn time: a
    backgrounded tab does not queue up a burst of regrows to run the
    moment it comes back. */
-const VIZ_REGROW = [45, 60];         // seconds between resows
 /* A touch quicker than the site's 6, and it stayed at 5 when the resow
    cycle stretched to 45-60s. The ramp is the field arriving, not the
    thing you are watching -- at 10s it was most of what you ever saw
@@ -1968,14 +2034,12 @@ const VIZ_REGROW = [45, 60];         // seconds between resows
    the better part of a minute of settled field, which is where the
    wander and the breathing actually show. Saved and restored around the
    mode, because P.grow is global and travels in tune(). */
-const VIZ_GROW = 5;
 /* A quarter under the site's 1.70. The visualizer is watched rather than
    read, and at full size the blooms crowd the frame -- smaller ones let
    the scatter and the glades read as landscape instead of as texture.
    Borrowed and restored like P.grow, and it needs a re-bake on the way
    in and out: sprites are baked AT this size, so unlike the gains it is
    geometry rather than colour. */
-const VIZ_SIZE = 1.275;
 let vizRegrowIn = 0, vizGrowWas = null, vizGhostWas = null, vizSizeWas = null;
 
 function resetViz(){
@@ -2145,7 +2209,7 @@ function frame(now){
 
   ctx.setTransform(1,0,0,1,0,0);
   ctx.globalAlpha = 1;
-  if(vig) ctx.drawImage(vig, 0, 0);
+  if(vig && vig.width && vig.height) ctx.drawImage(vig, 0, 0);   // see resize()
 
   requestAnimationFrame(frame);
 }

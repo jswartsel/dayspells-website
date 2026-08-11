@@ -339,6 +339,21 @@ first for what the project is and how to run it.
   not match the name, so a name nothing claims hides every page at once.
   Do not "fix" it by adding a `data-view="viz"` element -- that would put
   a box back on screen and give the zone pass something to measure.
+- **Adjustable numbers go in `TUNING`, not beside their code.** The
+  block sits right after `DEFAULTS`. Values live there; the reasoning
+  stays with the code it constrains. Two sets are deliberately out:
+  `WANDER` (it carries per-walker `t`/`dir` state, so it belongs with
+  its stepper) and the engine constants SHRINK / WEIGHT / CLUSTER /
+  FORCE / SWING_MAX / BRUSH.
+- **A 0-size viewport at load used to freeze the meadow for good.** A
+  0x0 canvas makes a 0x0 vignette, `drawImage` throws
+  InvalidStateError, and that throw lands inside `frame()` BEFORE its
+  `requestAnimationFrame` -- so the loop stops permanently and never
+  recovers even once a real size arrives. Observed exactly that way in
+  an embedding pane that had not been sized yet. `resize()` now floors
+  W/H and the canvas at 1, and the vignette blit checks its dimensions.
+  The general lesson is the one that keeps recurring here: anything that
+  can throw inside `frame()` does not cost a frame, it costs the page.
 - **The visualizer BORROWS globals, it does not own them.** `P.grow`,
   `P.size` and `P.ghostOn` are all saved on the way into `#viz` and put
   back on the way out, each behind a `viz*Was === null` guard so
