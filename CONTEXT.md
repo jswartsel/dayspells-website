@@ -25,10 +25,10 @@ crewelwork panels, then scattered procedurally so the field is different
 on every load. If something is missing from the field, it gets
 *extracted*, not drawn.
 
-Private repo, **~39 commits**, branches **`main`** (deploy) and **`dev`**
-(work). `CNAME` is **dayspells.com**. Pages on a private repo needs a paid
-plan — **this has never been confirmed to actually serve.** Check the real
-domain before assuming a push deployed.
+Private repo, **~51 commits**, branches **`main`** (deploy) and **`dev`**
+(work). `CNAME` is **dayspells.com**. **Pages is live and confirmed
+serving** (2026-08-11), including `dayspells.com/viz` through the
+redirect stub — so a fast-forward of `main` and a push is a deploy.
 
 ---
 
@@ -400,7 +400,6 @@ Full list in `CLAUDE.md`. The five that cost the most:
   thing to move if repo size bites.
 - **`assets/palette.json` churns on every build.** Nothing reads it at
   runtime; seed the k-means if the noise annoys.
-- **GitHub Pages not confirmed live.**
 
 ---
 
