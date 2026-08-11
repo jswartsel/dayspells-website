@@ -339,6 +339,28 @@ first for what the project is and how to run it.
   not match the name, so a name nothing claims hides every page at once.
   Do not "fix" it by adding a `data-view="viz"` element -- that would put
   a box back on screen and give the zone pass something to measure.
+- **A capture is `settingsNow()`, not `{...P}`.** The visualizer borrows
+  `P.grow`, `P.size` and `P.ghostOn`, so a raw spread taken in `#viz`
+  records the visualizer's geometry. Captures are meant to be pasted
+  back into `DEFAULTS`, so that would be a trap. `settingsNow()` loops
+  over `vizWas` and restores anything on loan -- which is why the borrow
+  bookkeeping is ONE table rather than three separate lets: add a fourth
+  borrow and capture follows it for free instead of silently going
+  stale. It must also stay a COPY; `P` is mutated in place by every
+  walker, so pushing `P` itself gives a list of N identical objects all
+  tracking the live field.
+- **A fixed block with `left:50%` and no `right` shrink-wraps to HALF
+  the screen.** The used width is shrink-to-fit against the space
+  remaining to its right, so `max-width` never gets a say -- the toast
+  wrapped to three lines on a 382px viewport before this was fixed with
+  `left:0; right:0`. The `.hint` gets away with the same pattern only
+  because it is three short words.
+- **Never claim the clipboard worked before the promise settles.**
+  `navigator.clipboard.writeText` rejects on an insecure origin, a
+  denied permission, or a gesture the browser considers stale -- and a
+  synthetic `KeyboardEvent` carries no user activation at all, so it
+  fails under test while a real keypress succeeds. The toast waits on
+  the promise and the failure path leaves the JSON in the console.
 - **Adjustable numbers go in `TUNING`, not beside their code.** The
   block sits right after `DEFAULTS`. Values live there; the reasoning
   stays with the code it constrains. Two sets are deliberately out:

@@ -238,7 +238,7 @@ step sizes, because halving is a bigger move than ×1.5 and a fair coin
 wilts the whole meadow.
 
 ### The panel
-Corner links **wander · regrow · mod**. `c` toggles, `Esc` closes,
+Corner links **wander · regrow · mod**. `m` toggles the panel, `Esc` closes,
 `#tune` opens on load. Alt-click any control restores its default.
 
 | group | |
@@ -251,8 +251,14 @@ Corner links **wander · regrow · mod**. `c` toggles, `Esc` closes,
 | **plant mix** | purple / white / yellow / pink flwrs, grass |
 
 Mix and density **queue a regrow 2s** after the last change.
-**There is no `copy json` button** — `copy(tune())` in the console does
-the same job; `tune()` with no argument returns the current set.
+**Capture is `c` and `j`**, replacing the old `copy json` button: `c`
+snapshots settings onto a running list, `j` copies the list as a JSON
+object with a transient confirmation. Both work on every page. Captures
+**see through** the visualizer's borrows, so a viz capture records your
+real grow/size/ghostOn, not the borrowed ones — they exist to be pasted
+back into `DEFAULTS`. `tune()` is unchanged and still reports live `P`.
+Console: `captures()`, `capturesJSON()`, `clearCaptures()`.
+**`c` no longer opens the panel; `m` does.**
 
 ---
 

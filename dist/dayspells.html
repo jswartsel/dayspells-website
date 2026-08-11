@@ -209,6 +209,29 @@
   }
   .hint[data-done="true"]{opacity:0}
 
+  /* Transient confirmation for the capture keys. Deliberately NOT in the
+     body.viz hide list below: it only exists for a second after you
+     press something, so it does not put standing text on a page whose
+     whole point is having none, and without it `c` would be a key that
+     appears to do nothing. Sits above the hint and is inert to the
+     pointer, so it can never eat a brush stroke. */
+  /* left:0/right:0 rather than the left:50% + translateX(-50%) the hint
+     uses. A fixed block with only `left` set is shrink-to-fit against
+     the space REMAINING to its right -- half the screen -- so this
+     sentence wrapped to three lines on a phone and max-width never got
+     a say. The hint gets away with it by being three short words. */
+  .toast{
+    position:fixed; left:0; right:0;
+    bottom:clamp(1.3rem,4vh,2.4rem); z-index:10; margin:0;
+    padding:0 clamp(.8rem,4vw,2rem);
+    font-family:inherit; font-weight:700;
+    font-size:.64rem; letter-spacing:.22em; text-transform:lowercase;
+    color:var(--mark-color); text-align:center;
+    opacity:0; transition:opacity .28s ease; pointer-events:none;
+  }
+  .toast[data-on="true"]{opacity:.92}
+  @media (prefers-reduced-motion:reduce){ .toast{transition:none} }
+
   /* ---------- visualizer ----------------------------------------- */
   /* #viz is a page with nothing on it. Every [data-view] is already
      hidden by the router -- showView hides everything whose data-view
@@ -354,6 +377,7 @@
 </div>
 <a class="back" id="back" href="#home" data-bare="0.8" aria-label="back" hidden>&lt;</a>
 <p class="hint" id="hint">move through the field</p>
+<p class="toast" id="toast" role="status" aria-live="polite"></p>
 <div class="loading" id="loading">threading</div>
 
 <div class="tools">
@@ -1758,15 +1782,15 @@ function showView(name, resow){
      Guarded both ways so re-entering does not save the borrowed value
      over the real one. */
   if(viz){
-    if(vizGrowWas === null){ vizGrowWas = P.grow; P.grow = VIZ_GROW; }
-    if(vizSizeWas === null){ vizSizeWas = P.size; P.size = VIZ_SIZE; rebakePlants(); }
-    if(vizGhostWas === null){ vizGhostWas = P.ghostOn; ghostMuted = false; setGhost(true); }
+    if(vizWas.grow === null){ vizWas.grow = P.grow; P.grow = VIZ_GROW; }
+    if(vizWas.size === null){ vizWas.size = P.size; P.size = VIZ_SIZE; rebakePlants(); }
+    if(vizWas.ghostOn === null){ vizWas.ghostOn = P.ghostOn; ghostMuted = false; setGhost(true); }
     syncPanel();
     resetViz();
-  }else if(vizGrowWas !== null || vizSizeWas !== null || vizGhostWas !== null){
-    if(vizGrowWas !== null){ P.grow = vizGrowWas; vizGrowWas = null; }
-    if(vizSizeWas !== null){ P.size = vizSizeWas; vizSizeWas = null; rebakePlants(); }
-    if(vizGhostWas !== null){ setGhost(!!vizGhostWas); vizGhostWas = null; }
+  }else if(vizWas.grow !== null || vizWas.size !== null || vizWas.ghostOn !== null){
+    if(vizWas.grow !== null){ P.grow = vizWas.grow; vizWas.grow = null; }
+    if(vizWas.size !== null){ P.size = vizWas.size; vizWas.size = null; rebakePlants(); }
+    if(vizWas.ghostOn !== null){ setGhost(!!vizWas.ghostOn); vizWas.ghostOn = null; }
     syncPanel();
   }
   if(resow && booted) regrowNow();
@@ -2040,7 +2064,13 @@ function stepDoodle(dt){
    Borrowed and restored like P.grow, and it needs a re-bake on the way
    in and out: sprites are baked AT this size, so unlike the gains it is
    geometry rather than colour. */
-let vizRegrowIn = 0, vizGrowWas = null, vizGhostWas = null, vizSizeWas = null;
+let vizRegrowIn = 0;
+/* What the visualizer has borrowed, keyed by the P setting it stands in
+   for. null means "not borrowed, P is the real value". One table rather
+   than three separate lets, because anything that needs to see through
+   the borrow -- capture() does -- can then loop over it instead of
+   naming each one and quietly going stale when a fourth is added. */
+const vizWas = {grow: null, size: null, ghostOn: null};
 
 function resetViz(){
   vizRegrowIn = rnd(VIZ_REGROW[0], VIZ_REGROW[1]);
@@ -2213,6 +2243,95 @@ function frame(now){
 
   requestAnimationFrame(frame);
 }
+
+/* ---------- capture ----------------------------------------------- */
+/* `c` snapshots the current settings onto a list; `j` puts the whole
+   list on the clipboard. This replaces the old `copy json` button, and
+   the difference that matters is the LIST: wander walks the colours
+   somewhere good and then keeps walking, so by the time you have
+   decided you liked it, it is gone. Tapping `c` costs nothing and can
+   be done on the way past; choosing between the captures happens later,
+   in a text editor, instead of racing a moving field.
+
+   A snapshot is {...P}, the same object tune() returns and accepts, so
+   any entry pastes straight back in. It is a copy, not a reference --
+   P is mutated in place by every walker, so storing P itself would give
+   a list of N identical objects all tracking the live field.
+
+   A capture SEES THROUGH the visualizer's borrows. #viz swaps P.grow,
+   P.size and P.ghostOn for its own values and puts them back on the way
+   out, so a raw {...P} taken there would record 5 / 1.275 / 1 -- the
+   visualizer's settings, not yours. Captured entries are meant to be
+   pasted back into DEFAULTS, and a paste that quietly moved the site's
+   grow-in and plant size to the visualizer's would be a trap. So
+   settingsNow() consults vizWas and restores the underlying value for
+   anything currently on loan. Everything else in P is genuinely live
+   and captured as-is: the wander colours, the gains rolled at the last
+   resow, the mix, all of it.
+
+   tune() is deliberately NOT changed to match. Its job is to report
+   what the field is doing at this instant, borrows included; capture's
+   job is to save settings you can return to. Different questions. */
+const captured = [];
+
+function settingsNow(){
+  const s = {...P};
+  for(const k in vizWas) if(vizWas[k] !== null) s[k] = vizWas[k];
+  return s;
+}
+
+/* One object rather than a bare array, so the payload can say what it
+   is and gain fields later without breaking anything that reads it.
+   captures[n] is a plain settings object -- tune(that) applies it. */
+function capturesJSON(){
+  return JSON.stringify({
+    captured: new Date().toISOString(),
+    count: captured.length,
+    captures: captured
+  }, null, 2);
+}
+
+function capture(){
+  captured.push(settingsNow());
+  toast(captured.length === 1
+    ? 'one drawn from the well'
+    : captured.length + ' drawn from the well');
+}
+
+/* The clipboard write can fail -- an insecure origin, a browser that
+   wants a fresher gesture, a denied permission -- and saying "copied"
+   when nothing was copied is worse than saying nothing. So the toast
+   waits for the promise, and the fallback path leaves the JSON in the
+   console where it can still be retrieved. */
+function copyCaptures(){
+  if(!captured.length){ toast('the well is empty'); return; }
+  const text = capturesJSON();
+  const ok = ()=>toast('the json of your dreams has been copied from the well');
+  const no = ()=>{
+    console.log(text);
+    toast('clipboard refused it -- the json is in the console');
+  };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(ok, no);
+  }else{
+    no();
+  }
+}
+
+let toastT = null;
+function toast(msg){
+  const el = document.getElementById('toast');
+  if(!el) return;
+  el.textContent = msg;
+  el.dataset.on = 'true';
+  clearTimeout(toastT);
+  toastT = setTimeout(()=>{ el.dataset.on = 'false'; }, 2600);
+}
+
+/* Console handles, alongside tune() / density() / clearings(). */
+window.captures = ()=>captured.map(c=>({...c}));
+window.capturesJSON = capturesJSON;
+window.clearCaptures = ()=>{ captured.length = 0; toast('the well is empty'); };
 
 /* ---------- tuning panel ----------------------------------------- */
 /* key, label, min, max, step, what changing it costs */
@@ -2450,12 +2569,22 @@ function buildPanel(){
   document.getElementById('tWander').onclick = ()=>setWander(!wandering);
   document.getElementById('tRegrow').onclick = ()=>regrowNow();
   addEventListener('keydown', e=>{
-    /* `m` for mod, alongside the older `c`. It is the only way into the
-       panel in the visualizer, where the corner links are hidden -- so
-       the settings stay reachable on a page with nothing on it. */
-    if((e.key === 'm' || e.key === 'c') && !e.metaKey && !e.ctrlKey && !e.altKey){
-      show(panel.hidden);
-    }
+    /* `m` for mod. It used to answer to `c` as well; `c` is capture now,
+       so `m` is the only key into the panel -- which matters most in the
+       visualizer, where the corner links are hidden and there is no
+       other way in. `#tune` in the URL and the corner link still work.
+
+       The modifier guard is load-bearing on these: without it Cmd/Ctrl+C
+       would capture instead of copying the selection. */
+    const plain = !e.metaKey && !e.ctrlKey && !e.altKey;
+    /* Skipped while a control has focus, for the same reason space is:
+       the panel's inputs should get their own keystrokes. */
+    const onControl = e.target && (e.target.tagName === 'INPUT'
+                                || e.target.tagName === 'BUTTON'
+                                || e.target.tagName === 'TEXTAREA');
+    if(e.key === 'm' && plain && !onControl) show(panel.hidden);
+    if(e.key === 'c' && plain && !onControl) capture();
+    if(e.key === 'j' && plain && !onControl) copyCaptures();
     if(e.key === 'Escape') show(false);
     /* Space toggles wander. Skipped when a control has focus: a button
        or a slider already answers to space itself, so handling it here

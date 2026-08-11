@@ -463,9 +463,10 @@ colour so they read as part of the page rather than as chrome:
 - **mod** — toggle the panel
 
 They stay put while the panel is open, so `mod` is always there to close
-it again. **Space** toggles wander, `m` (or the older `c`) toggles the panel and
-`Esc` closes it; `#tune` in the URL opens it on load. `m` is the only
-way into the panel in the visualizer, where the corner links are hidden. The panel itself is
+it again. **Space** toggles wander, `m` toggles the panel and `Esc`
+closes it; `#tune` in the URL opens it on load. `m` is the only way into
+the panel in the visualizer, where the corner links are hidden. `c` and
+`j` capture settings — see below. The panel itself is
 hidden by default.
 
 Space is ignored while a button or slider has focus — those already
@@ -648,10 +649,56 @@ around words that are no longer there.
 | **plant mix** | relative amount of purple / white / yellow / pink flwrs, and grass |
 | | a live fps / drawn / quality readout |
 
-There is no `copy json` button any more — `tune()` with no argument
-returns the current set, so `copy(tune())` in the console does the same
-job and `JSON.stringify(tune(), null, 2)` gives it formatted. The
-paste-it-back-into-`DEFAULTS` workflow is otherwise unchanged.
+## Capture: `c` and `j`
+
+The old `copy json` button is now two keys, and the difference that
+matters is that captures form a **list**.
+
+| | |
+|---|---|
+| `c` | snapshot the current settings onto a running list |
+| `j` | copy the whole list to the clipboard as JSON |
+
+Wander walks the colours somewhere good and then keeps walking, so by
+the time you have decided you liked it, it is gone. Tapping `c` costs
+nothing and can be done on the way past; choosing between the captures
+happens later, in a text editor, instead of racing a moving field. Both
+keys work on every page, including the visualizer — where `c` is the
+only feedback you get, since the corner links are hidden.
+
+A brief line confirms each one (*"3 drawn from the well"*, *"the json of
+your dreams has been copied from the well"*). It is transient, so it
+does not put standing text on a page whose whole point is having none.
+
+The payload is a JSON **object**, so it can say what it is:
+
+```json
+{ "captured": "2026-08-11T…", "count": 3, "captures": [ { … }, { … } ] }
+```
+
+Each entry is the same shape `tune()` returns and accepts, so any one of
+them pastes straight back into `tune({…})` or into `DEFAULTS`.
+
+**Captures see through the visualizer's borrows.** `#viz` swaps
+`P.grow`, `P.size` and `P.ghostOn` for its own values, so a raw snapshot
+taken there would record 5 / 1.275 / 1 — the visualizer's settings, not
+yours. Since captures exist to be pasted back into `DEFAULTS`, a paste
+that silently moved the site's grow-in and plant size to the
+visualizer's would be a trap. Everything genuinely live is captured
+as-is: the wander colours, the gains rolled at the last resow, the mix.
+`tune()` is deliberately unchanged and still reports live `P`, borrows
+included — its job is what the field is doing now, not what you would
+want to return to.
+
+The clipboard write can fail (an insecure origin, a stale gesture, a
+denied permission), so the confirmation waits on the promise rather than
+claiming success; on failure it says so and leaves the JSON in the
+console. Console handles: `captures()`, `capturesJSON()`,
+`clearCaptures()`. Reloading empties the list.
+
+**`c` no longer opens the panel** — `m` does, as does the corner link
+and `#tune` in the URL. `Cmd`/`Ctrl` held down is ignored by both keys,
+so the browser's own copy still works.
 
 Several settings are live in `P` and travel in `tune()` but no longer
 have controls: `speed`, `settle` and `radius` (rustle), `bgTint` and
