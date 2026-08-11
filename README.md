@@ -513,7 +513,15 @@ colour so they read as part of the page rather than as chrome:
 
 They stay put while the panel is open, so `mod` is always there to close
 it again. **Space** toggles wander, `m` toggles the panel and `Esc`
-closes it; `#tune` in the URL opens it on load. `m` is the only way into
+closes it; `#tune` in the URL opens it on load. **`f` goes fullscreen**
+— the Fullscreen API on `documentElement`, so the page takes the whole
+screen with no tab strip or address bar, and the panel comes with it.
+It has to come from a user gesture, which is why it is a key and not
+something the visualizer does for itself on the way in; entering fires a
+resize, which resows, exactly as dragging a window does. Not available
+on iOS Safari, which only fullscreens video — the route there is Add to
+Home Screen with a `display: standalone` manifest, which the site does
+not have yet. `m` is the only way into
 the panel in the visualizer, where the corner links are hidden. `c` and
 `j` capture settings — see below. The panel itself is
 hidden by default.

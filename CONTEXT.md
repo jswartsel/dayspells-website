@@ -240,6 +240,9 @@ wilts the whole meadow.
 ### The panel
 Corner links **wander · regrow · mod**. `m` toggles the panel, `Esc` closes,
 `#tune` opens on load. Alt-click any control restores its default.
+Keys: space = wander, `m` = panel, `c`/`j` = capture, **`f` = fullscreen**
+(Fullscreen API on `documentElement`; needs a user gesture, so it cannot
+be done on load; unavailable on iOS Safari, which only fullscreens video).
 
 | group | |
 |---|---|

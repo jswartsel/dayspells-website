@@ -2322,6 +2322,47 @@ function copyCaptures(){
   }
 }
 
+/* ---------- fullscreen -------------------------------------------- */
+/* The Fullscreen API, which is the only way a page can take the whole
+   screen on its own -- CSS cannot do it, because the browser's chrome is
+   not the page's to remove. It hands back every pixel including the tab
+   strip and the address bar, so it is cleaner than F11 rather than the
+   same thing.
+
+   It MUST come from a user gesture; a keydown is one. Calling it on load
+   or from a timer is rejected, which is why this is a key and not
+   something the visualizer does for itself on the way in.
+
+   documentElement rather than the canvas, so the panel and the corner
+   links come along and `m` still works once you are in there.
+
+   Entering fires a resize, which resows -- correct, since the clearings
+   are measured off a viewport that has just changed size, and the same
+   thing already happens when you drag a window.
+
+   Not available on iOS Safari, which only fullscreens video. The route
+   there is Add to Home Screen with a `display: standalone` manifest,
+   which is a different feature; the toast says so rather than failing
+   silently. */
+function isFull(){
+  return !!(document.fullscreenElement || document.webkitFullscreenElement);
+}
+
+function toggleFull(){
+  if(isFull()){
+    const exit = document.exitFullscreen || document.webkitExitFullscreen;
+    if(exit) exit.call(document);
+    return;
+  }
+  const el = document.documentElement;
+  const req = el.requestFullscreen || el.webkitRequestFullscreen;
+  if(!req){ toast('this browser will not go fullscreen'); return; }
+  /* Only the standard call returns a promise; the prefixed one does not,
+     so the .then guard is what keeps this from throwing on old Safari. */
+  const r = req.call(el);
+  if(r && r.catch) r.catch(()=>toast('fullscreen refused'));
+}
+
 let toastT = null;
 function toast(msg){
   const el = document.getElementById('toast');
@@ -2589,6 +2630,7 @@ function buildPanel(){
     if(e.key === 'm' && plain && !onControl) show(panel.hidden);
     if(e.key === 'c' && plain && !onControl) capture();
     if(e.key === 'j' && plain && !onControl) copyCaptures();
+    if(e.key === 'f' && plain && !onControl) toggleFull();
     if(e.key === 'Escape') show(false);
     /* Space toggles wander. Skipped when a control has focus: a button
        or a slider already answers to space itself, so handling it here
